@@ -172,13 +172,34 @@ export function readGitHubOAuthReturn() {
     if (!code) return null;
     const expected = sessionStorage.getItem('gr-gh-oauth-state');
     if (expected && state && state !== expected) return null;
-    // Clean URL
     const clean = `${window.location.origin}${window.location.pathname}`;
     window.history.replaceState({}, '', clean);
     return { code, state };
   } catch {
     return null;
   }
+}
+
+/** Exchange OAuth code via our serverless route; returns { login, id, avatar }. */
+export async function exchangeGitHubCode(code) {
+  const res = await fetch('/api/github/oauth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'GitHub connect failed');
+  }
+  if (!body.login) {
+    throw new Error('GitHub connect returned no user');
+  }
+  return {
+    login: body.login,
+    id: body.id,
+    avatar: body.avatar || '',
+    name: body.name || '',
+  };
 }
 
 export function demoConnectGitHub() {

@@ -21,6 +21,7 @@ export {
   readGitHubOAuthReturn,
   githubClientId,
   demoConnectGitHub,
+  exchangeGitHubCode,
 } from './payments.js';
 
 export { loadProfile, saveProfile, relayerPayout, disconnectGitHub } from './profile.js';

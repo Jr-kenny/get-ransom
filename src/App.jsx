@@ -21,6 +21,7 @@ import {
   readGitHubOAuthReturn,
   githubClientId,
   demoConnectGitHub,
+  exchangeGitHubCode,
 } from './nimiq.js';
 
 const STATUS_LABEL = {
@@ -326,12 +327,36 @@ export default function App() {
   useEffect(() => saveBounties(bounties), [bounties]);
   useEffect(() => saveRoute(route), [route]);
 
-  // GitHub OAuth return (when VITE_GITHUB_CLIENT_ID is set)
+  // GitHub OAuth return — exchange code on the server, bind identity to profile
   useEffect(() => {
+    let cancelled = false;
     const ret = readGitHubOAuthReturn();
-    if (!ret?.code) return;
-    // Token exchange needs a backend; keep the code briefly for that hop.
-    setToast('GitHub OAuth returned — complete token exchange on the server to finish connect.');
+    if (!ret?.code) return undefined;
+    setBusy('Connecting GitHub…');
+    (async () => {
+      try {
+        const user = await exchangeGitHubCode(ret.code);
+        if (cancelled) return;
+        setProfile(
+          saveProfile({
+            ...loadProfile(),
+            githubUser: user.login,
+            githubId: user.id,
+            githubAvatar: user.avatar || '',
+            githubConnected: true,
+            githubConnectedAt: new Date().toISOString().slice(0, 10),
+          }),
+        );
+        setToast(`Connected @${user.login}`);
+      } catch (err) {
+        if (!cancelled) setToast(err?.message || 'GitHub connect failed');
+      } finally {
+        if (!cancelled) setBusy('');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
