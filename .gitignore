@@ -29,3 +29,4 @@ get-ransom-*.png
 .env
 .env.*
 !.env.example
+.vercel
