@@ -375,6 +375,12 @@ a.btn.primary, a.btn { text-decoration: none; display: inline-flex; align-items:
   min-height: 48px;
   font-size: 16px;
 }
+.claim-modal .claim-modal-list {
+  margin-top: 4px;
+  max-height: 220px;
+  overflow: auto;
+}
+.claim-modal .claim-modal-list .claim:first-of-type { border-top: 1px solid var(--line); }
 .promise-modal .promise-amount {
   display: flex;
   flex-direction: column;

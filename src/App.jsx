@@ -1350,6 +1350,7 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
 function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onClaim, onDecide, onRetract, onOpenPayouts }) {
   const [topAmt, setTopAmt] = useState('50');
   const [prUrl, setPrUrl] = useState('');
+  const [claimOpen, setClaimOpen] = useState(false);
   const isCreator =
     b.creator === me ||
     (profile.githubUser && b.creatorGithub === profile.githubUser) ||
@@ -1357,6 +1358,14 @@ function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onCl
   const pot = bountyTotal(b);
   const canClaim = b.status === 'open' || b.status === 'review';
   const canTopup = canClaim;
+
+  function submitClaim() {
+    const url = prUrl.trim();
+    if (!url) return;
+    onClaim(url);
+    setPrUrl('');
+    setClaimOpen(false);
+  }
 
   return (
     <div className="detail">
@@ -1455,15 +1464,91 @@ function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onCl
             type="button"
             className="btn primary claim-bounty-btn"
             disabled={busy}
-            onClick={() => {
-              const el = document.getElementById('c-pr');
-              if (el) el.focus();
-            }}
+            onClick={() => setClaimOpen(true)}
           >
             Claim bounty
           </button>
         )}
       </div>
+
+      {claimOpen && (
+        <div className="modal-backdrop" onClick={() => !busy && setClaimOpen(false)}>
+          <div
+            className="modal claim-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Claim bounty"
+          >
+            <h3>Claim bounty</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Paste your pull request URL. Multiple hunters can claim. Only the merged PR is paid.
+            </p>
+            {b.requireAssignment && (b.issueAssignees || []).length > 0 && (
+              <p className="muted" style={{ margin: '0 0 10px', fontSize: 13 }}>
+                Assignee lock: {(b.issueAssignees || []).join(', ')}
+              </p>
+            )}
+            <div className="field">
+              <label htmlFor="claim-pr">GitHub pull request URL</label>
+              <input
+                id="claim-pr"
+                value={prUrl}
+                onChange={(e) => setPrUrl(e.target.value)}
+                placeholder="https://github.com/owner/repo/pull/12"
+                inputMode="url"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitClaim();
+                  }
+                }}
+              />
+            </div>
+            <div className="row">
+              <button
+                type="button"
+                className="btn primary"
+                disabled={!prUrl.trim() || busy}
+                onClick={submitClaim}
+              >
+                {busy ? 'Saving…' : 'Submit claim'}
+              </button>
+              <button type="button" className="btn ghost" disabled={busy} onClick={() => setClaimOpen(false)}>
+                Cancel
+              </button>
+            </div>
+
+            <div className="claim-modal-list">
+              <p className="reward-label" style={{ margin: '16px 0 8px' }}>
+                PRs already submitted
+              </p>
+              {b.claims.length === 0 && (
+                <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                  None yet. Yours would be the first.
+                </p>
+              )}
+              {b.claims.map((c) => {
+                const merged = c.prMerged || c.state === 'merged' || c.state === 'accepted';
+                return (
+                  <div key={c.id} className="claim">
+                    <div className="meta">
+                      {c.githubUser && <span>@{c.githubUser}</span>}
+                      <span>{c.at}</span>
+                      <span className={c.state === 'accepted' ? 'ok' : merged ? 'ok' : c.state === 'rejected' ? 'bad' : 'warn'}>
+                        {c.state === 'accepted' ? 'paid' : merged ? 'merged' : c.state}
+                      </span>
+                    </div>
+                    <a href={c.ref} target="_blank" rel="noreferrer" className="pr-link">
+                      {c.ref}
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="panel-box">
         <h4>Claims</h4>
@@ -1512,33 +1597,6 @@ function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onCl
             </div>
           );
         })}
-        {canClaim && (
-          <div className="form" style={{ marginTop: 12 }}>
-            <div className="field">
-              <label htmlFor="c-pr">GitHub pull request URL</label>
-              <div className="row" style={{ marginTop: 0 }}>
-                <input
-                  id="c-pr"
-                  value={prUrl}
-                  onChange={(e) => setPrUrl(e.target.value)}
-                  placeholder="https://github.com/owner/repo/pull/…"
-                  inputMode="url"
-                  style={{ flex: 1, minWidth: 180 }}
-                />
-                <button
-                  className="btn small primary"
-                  disabled={!prUrl.trim() || busy}
-                  onClick={() => {
-                    onClaim(prUrl);
-                    setPrUrl('');
-                  }}
-                >
-                  Claim
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         {b.status === 'paid' && (
           <div className="notice" style={{ marginTop: 12 }}>
             Complete · paid.
