@@ -10,12 +10,10 @@ import {
   listNimiqAccounts,
   getNimiqNetworkStatus,
   isValidNimiqAddress,
-  isDemoAddress,
   nimiqPayAppLink,
   importGitHubIssue,
   importGitHubPull,
   isAssignedTo,
-  getTreasuryAddress,
   mockTxHash,
   loadProfile,
   saveProfile,
@@ -26,6 +24,7 @@ import {
   githubClientId,
   demoConnectGitHub,
   exchangeGitHubCode,
+  signNimiqMessage,
 } from './nimiq.js';
 
 const STATUS_LABEL = {
@@ -39,9 +38,69 @@ function StatusBadge({ status }) {
   return <span className={`badge ${status}`}>{STATUS_LABEL[status] || status}</span>;
 }
 
-function ModeBadge({ mode }) {
+function ModeBadge() {
+  return <span className="badge type">◷ pay on solve</span>;
+}
+
+function buildPromiseMessage({ action, bountyId, repo, issueNumber, issueUrl, amount, githubUser, wallet }) {
+  const lines = [
+    'get-ransom:promise:v1',
+    `action:${action}`,
+    bountyId ? `bounty:${bountyId}` : null,
+    repo ? `repo:${repo}` : null,
+    issueNumber != null ? `issue:${issueNumber}` : null,
+    issueUrl ? `issue_url:${issueUrl}` : null,
+    `amount:${amount}NIM`,
+    'mode:on-solve',
+    `github:${githubUser || 'anon'}`,
+    `wallet:${wallet || 'anon'}`,
+    `at:${new Date().toISOString()}`,
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
+function PromiseModal({ flow, wallet, profile, onCancel, onConfirm, busy }) {
+  if (!flow) return null;
+  const amount = flow.amount;
   return (
-    <span className="badge type">{mode === 'prepaid' ? '◈ prepaid' : '◷ pay on solve'}</span>
+    <div className="modal-backdrop" onClick={busy ? undefined : onCancel}>
+      <div
+        className="modal promise-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Sign bounty promise"
+      >
+        <h3>Sign promise</h3>
+        <p className="muted" style={{ marginTop: 0 }}>
+          {flow.action === 'create'
+            ? 'You promise to pay this pot from Nimiq Pay when a merged PR is accepted. No platform escrow.'
+            : 'You promise this amount toward the pot. On accept, the creator pays the full reward from their wallet.'}
+        </p>
+        <div className="promise-amount">
+          <span>{flow.action === 'create' ? 'Reward' : 'Your pledge'}</span>
+          <b>
+            {Number(amount).toLocaleString()}
+            <i>NIM</i>
+          </b>
+        </div>
+        <pre className="promise-message" aria-label="Promise message">
+          {flow.message}
+        </pre>
+        <p className="muted" style={{ fontSize: 12, margin: '0 0 12px' }}>
+          Signed as {profile.githubConnected ? `@${profile.githubUser}` : 'wallet'} ·{' '}
+          {wallet?.inPay ? 'Nimiq Pay will ask you to confirm' : 'browser preview signature'}
+        </p>
+        <div className="row">
+          <button type="button" className="btn primary" disabled={busy} onClick={onConfirm}>
+            {busy ? 'Waiting for wallet…' : 'Sign & confirm'}
+          </button>
+          <button type="button" className="btn ghost" disabled={busy} onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -341,11 +400,11 @@ export default function App() {
   const [route, setRoute] = useState(() => loadRoute(bounties));
   const [profile, setProfile] = useState(() => loadProfile());
   const [query, setQuery] = useState('');
-  const [kindFilter, setKindFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [busy, setBusy] = useState('');
   const [toast, setToast] = useState('');
   const [actionModal, setActionModal] = useState(null);
+  const [promiseFlow, setPromiseFlow] = useState(null);
   const wallet = useWallet();
 
   function openSettingsGate(title, body) {
@@ -421,36 +480,16 @@ export default function App() {
     setBounties((prev) => prev.map((b) => (b.id === id ? fn(b) : b)));
   }
 
-  async function createBounty(data) {
+  async function createBounty(data, promise) {
     const base = Math.max(1, Math.round(Number(data.base) || 0));
     const id = uid('gr');
     const creator = wallet.address || 'anon';
-    let fundTx = null;
-
-    if (data.paymentMode === 'prepaid') {
-      const treasury = getTreasuryAddress();
-      if (wallet.inPay) {
-        if (isDemoAddress(treasury) || !isValidNimiqAddress(treasury)) {
-          setToast('Escrow address is not a real NIM address. Set VITE_TREASURY_ADDRESS.');
-          return;
-        }
-        setBusy(`Sending ${base} NIM to escrow…`);
-        try {
-          fundTx = await sendNim({ recipient: treasury, nim: base, memo: `bounty:create:${id}` });
-        } catch (err) {
-          setToast(err?.message || 'Funding cancelled');
-          setBusy('');
-          return;
-        }
-      } else {
-        fundTx = mockTxHash('fund');
-      }
-    }
+    const paymentMode = 'on-solve';
 
     const assignees = data.issueAssignees || [];
     const b = {
       id,
-      kind: data.kind,
+      kind: 'github',
       title: data.title.trim(),
       body: data.body.trim(),
       repo: data.repo.trim(),
@@ -459,10 +498,23 @@ export default function App() {
       issueAssignees: assignees,
       requireAssignment: assignees.length > 0,
       tags: data.tags,
-      paymentMode: data.paymentMode,
+      paymentMode,
       base,
       topups: [],
-      fundTx,
+      promises: [
+        {
+          id: uid('p'),
+          role: 'creator',
+          by: creator,
+          githubUser: profile.githubUser || '',
+          amount: base,
+          signature: promise?.signature || null,
+          publicKey: promise?.publicKey || '',
+          method: promise?.method || 'preview',
+          at: new Date().toISOString().slice(0, 10),
+        },
+      ],
+      fundTx: null,
       status: 'open',
       creator,
       createdAt: new Date().toISOString().slice(0, 10),
@@ -470,41 +522,99 @@ export default function App() {
     };
     setBounties((prev) => [b, ...prev]);
     setBusy('');
-    setToast(fundTx ? `Bounty live · ${String(fundTx).slice(0, 16)}…` : 'Bounty published');
+    setToast('Bounty live · signed promise');
     setRoute({ name: 'detail', id: b.id });
   }
 
-  async function addTopup(id, amount) {
+  async function addTopup(id, amount, promise) {
     const amt = Math.round(Number(amount));
     if (!amt || amt < 1) return;
     const bounty = bounties.find((b) => b.id === id);
     if (!bounty || bounty.status === 'paid' || bounty.status === 'retracted') return;
 
-    let txHash = null;
-    if (wallet.inPay) {
-      const treasury = getTreasuryAddress();
-      if (isDemoAddress(treasury) || !isValidNimiqAddress(treasury)) {
-        setToast('Escrow address is not a real NIM address. Set VITE_TREASURY_ADDRESS.');
-        return;
-      }
-      setBusy(`Sending ${amt} NIM top-up…`);
-      try {
-        txHash = await sendNim({ recipient: treasury, nim: amt, memo: `bounty:topup:${id}` });
-      } catch (err) {
-        setToast(err?.message || 'Top-up cancelled');
-        setBusy('');
-        return;
-      }
-    } else {
-      txHash = mockTxHash('topup');
-    }
+    const entry = {
+      id: uid('p'),
+      role: 'pledge',
+      by: wallet.address || 'anon',
+      githubUser: profile.githubUser || '',
+      amount: amt,
+      signature: promise?.signature || null,
+      publicKey: promise?.publicKey || '',
+      method: promise?.method || 'preview',
+      at: new Date().toISOString().slice(0, 10),
+    };
 
     updateBounty(id, (b) => ({
       ...b,
-      topups: [...b.topups, { by: wallet.address || 'anon', amount: amt, txHash }],
+      promises: [...(b.promises || []), entry],
+      topups: [
+        ...b.topups,
+        {
+          by: wallet.address || 'anon',
+          githubUser: profile.githubUser || '',
+          amount: amt,
+          txHash: null,
+          pledged: true,
+          signature: promise?.signature || null,
+          at: entry.at,
+        },
+      ],
     }));
-    setBusy('');
-    setToast(`Top-up · ${String(txHash).slice(0, 16)}…`);
+    setToast(`Promised +${amt} NIM · pot ${bountyTotal(bounty) + amt} NIM`);
+  }
+
+  function openPromiseFlow(flow) {
+    setPromiseFlow(flow);
+  }
+
+  async function confirmPromiseFlow() {
+    if (!promiseFlow) return;
+    const { action, data, bountyId, amount, message } = promiseFlow;
+    setBusy('Waiting for signature…');
+    try {
+      const signed = await signNimiqMessage(message);
+      setPromiseFlow(null);
+      setBusy('');
+      if (action === 'create') {
+        await createBounty(data, signed);
+      } else {
+        await addTopup(bountyId, amount, signed);
+      }
+    } catch (err) {
+      setBusy('');
+      setToast(err?.message || 'Promise signing cancelled');
+    }
+  }
+
+  function requestCreate(data) {
+    const message = buildPromiseMessage({
+      action: 'create',
+      repo: data.repo,
+      issueNumber: data.issueNumber,
+      issueUrl: data.issueUrl,
+      amount: data.base,
+      githubUser: profile.githubUser,
+      wallet: wallet.address,
+    });
+    setPromiseFlow({ action: 'create', data, amount: data.base, message });
+  }
+
+  function requestPledge(bountyId, amount) {
+    const bounty = bounties.find((b) => b.id === bountyId);
+    if (!bounty) return;
+    const amt = Math.round(Number(amount));
+    if (!amt || amt < 1) return;
+    const message = buildPromiseMessage({
+      action: 'pledge',
+      bountyId,
+      repo: bounty.repo,
+      issueNumber: bounty.issueNumber,
+      issueUrl: bounty.issueUrl,
+      amount: amt,
+      githubUser: profile.githubUser,
+      wallet: wallet.address,
+    });
+    setPromiseFlow({ action: 'pledge', bountyId, amount: amt, message });
   }
 
   async function addClaim(id, prUrl) {
@@ -783,7 +893,7 @@ export default function App() {
   }
 
   const filtered = bounties.filter((b) => {
-    if (kindFilter !== 'all' && b.kind !== kindFilter) return false;
+    if (b.kind !== 'github') return false;
     if (statusFilter !== 'all' && b.status !== statusFilter) return false;
     if (!query.trim()) return true;
     const q = query.toLowerCase();
@@ -950,6 +1060,17 @@ export default function App() {
           </div>
         )}
 
+        <PromiseModal
+          flow={promiseFlow}
+          wallet={wallet}
+          profile={profile}
+          busy={!!busy}
+          onCancel={() => {
+            if (!busy) setPromiseFlow(null);
+          }}
+          onConfirm={confirmPromiseFlow}
+        />
+
         {route.name === 'browse' && (
           <>
             <div className="toolbar">
@@ -963,13 +1084,6 @@ export default function App() {
                   placeholder="Search bounties, repos, tags…"
                   aria-label="Search bounties"
                 />
-              </div>
-              <div className="chip-row" role="group" aria-label="Kind filter">
-                {[['all', 'All'], ['github', 'GitHub'], ['task', 'Tasks']].map(([v, l]) => (
-                  <button key={v} className="chip" aria-pressed={kindFilter === v} onClick={() => setKindFilter(v)}>
-                    {l}
-                  </button>
-                ))}
               </div>
               <div className="chip-row" role="group" aria-label="Status filter">
                 {[['all', 'Any state'], ['open', 'Open'], ['review', 'In review'], ['paid', 'Paid']].map(([v, l]) => (
@@ -989,8 +1103,8 @@ export default function App() {
                 <article key={b.id} className="card">
                   <div className="meta">
                     <StatusBadge status={b.status} />
-                    <ModeBadge mode={b.paymentMode} />
-                    <span className="badge type">{b.kind === 'github' ? '⌥ github' : '✦ task'}</span>
+                    <ModeBadge />
+                    <span className="badge type">⌥ github</span>
                     {b.repo && <span>{b.repo}</span>}
                     {b.issueNumber != null && <span>issue #{b.issueNumber}</span>}
                   </div>
@@ -1037,7 +1151,7 @@ export default function App() {
           <CreateForm
             inPay={wallet.inPay}
             walletAddress={wallet.address}
-            onCreate={createBounty}
+            onCreate={requestCreate}
             busy={!!busy}
             onNeedWallet={() => {
               try {
@@ -1057,7 +1171,7 @@ export default function App() {
             inPay={wallet.inPay}
             busy={!!busy}
             onBack={() => setRoute({ name: 'browse' })}
-            onTopup={(amt) => addTopup(active.id, amt)}
+            onTopup={(amt) => requestPledge(active.id, amt)}
             onClaim={(ref) => addClaim(active.id, ref)}
             onDecide={(cid, ok) => decideClaim(active.id, cid, ok)}
             onRetract={() => retractBounty(active.id)}
@@ -1082,7 +1196,6 @@ export default function App() {
             profile={profile}
             earnedNim={earnedNim}
             wallet={wallet}
-            treasury={getTreasuryAddress()}
             focus={
               route.name === 'my-bounties'
                 ? 'bounties'
@@ -1105,7 +1218,6 @@ export default function App() {
 }
 
 function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
-  const [mode, setMode] = useState('github'); // github | task
   const [issueUrl, setIssueUrl] = useState('');
   const [imported, setImported] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -1117,14 +1229,13 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
   const [issueNumber, setIssueNumber] = useState(null);
   const [issueAssignees, setIssueAssignees] = useState([]);
   const [base, setBase] = useState('250');
-  const [paymentMode, setPaymentMode] = useState('on-solve');
 
-  const isGithub = mode === 'github';
   const valid =
     title.trim().length >= 8 &&
     body.trim().length >= 20 &&
     Number(base) >= 1 &&
-    (isGithub ? !!imported && repo.trim().length > 2 : true);
+    !!imported &&
+    repo.trim().length > 2;
 
   async function handleImport() {
     setImporting(true);
@@ -1158,7 +1269,7 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
         }
         if (valid && !busy) {
           onCreate({
-            kind: isGithub ? 'github' : 'task',
+            kind: 'github',
             title,
             body,
             repo,
@@ -1171,60 +1282,35 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
               .filter(Boolean)
               .slice(0, 5),
             base,
-            paymentMode,
+            paymentMode: 'on-solve',
           });
         }
       }}
     >
       <h2 style={{ margin: '4px 0 0', fontWeight: 400 }}>New bounty</h2>
+      <p className="muted" style={{ margin: '4px 0 12px', fontSize: 14 }}>
+        GitHub issue only · pay on solve
+      </p>
 
-      <div className="chip-row" role="group" aria-label="Bounty kind">
-        <button type="button" className="chip" aria-pressed={mode === 'github'} onClick={() => { setMode('github'); setImported(null); setImportMsg(''); }}>
-          ⌥ GitHub issue
-        </button>
-        <button type="button" className="chip" aria-pressed={mode === 'task'} onClick={() => { setMode('task'); setImported(null); setImportMsg(''); }}>
-          ✦ Open task
-        </button>
+      <div className="field">
+        <label htmlFor="f-issue">GitHub issue URL</label>
+        <div className="row" style={{ marginTop: 0 }}>
+          <input
+            id="f-issue"
+            value={issueUrl}
+            onChange={(e) => setIssueUrl(e.target.value)}
+            placeholder="https://github.com/owner/repo/issues/123"
+            inputMode="url"
+            style={{ flex: 1, minWidth: 200 }}
+          />
+          <button type="button" className="btn small primary" disabled={importing || !issueUrl.trim()} onClick={handleImport}>
+            {importing ? 'Importing…' : 'Import'}
+          </button>
+        </div>
+        {importMsg && <small style={{ color: imported ? 'var(--open)' : 'var(--lamp)' }}>{importMsg}</small>}
       </div>
 
-      {isGithub && (
-        <div className="field">
-          <label htmlFor="f-issue">GitHub issue URL</label>
-          <div className="row" style={{ marginTop: 0 }}>
-            <input
-              id="f-issue"
-              value={issueUrl}
-              onChange={(e) => setIssueUrl(e.target.value)}
-              placeholder="https://github.com/owner/repo/issues/123"
-              inputMode="url"
-              style={{ flex: 1, minWidth: 200 }}
-            />
-            <button type="button" className="btn small primary" disabled={importing || !issueUrl.trim()} onClick={handleImport}>
-              {importing ? 'Importing…' : 'Import'}
-            </button>
-          </div>
-          {importMsg && <small style={{ color: imported ? 'var(--open)' : 'var(--lamp)' }}>{importMsg}</small>}
-        </div>
-      )}
-
-      {mode === 'task' && (
-        <>
-          <div className="field">
-            <label htmlFor="t-title">Title</label>
-            <input id="t-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
-          </div>
-          <div className="field">
-            <label htmlFor="t-body">The work</label>
-            <textarea id="t-body" value={body} onChange={(e) => setBody(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="t-tags">Tags</label>
-            <input id="t-tags" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="docs, video" />
-          </div>
-        </>
-      )}
-
-      {isGithub && imported && (
+      {imported && (
         <div className="panel-box">
           <div className="meta">
             <span>{imported.repo}</span>
@@ -1241,22 +1327,16 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
         </div>
       )}
 
-      <div className="chip-row" role="group" aria-label="Payment mode">
-        <button type="button" className="chip" aria-pressed={paymentMode === 'on-solve'} onClick={() => setPaymentMode('on-solve')}>
-          ◷ Pay on solve
-        </button>
-        <button type="button" className="chip" aria-pressed={paymentMode === 'prepaid'} onClick={() => setPaymentMode('prepaid')}>
-          ◈ Prepaid
-        </button>
-      </div>
-
       <div className="field">
         <label htmlFor="f-base">Amount (NIM)</label>
         <input id="f-base" value={base} onChange={(e) => setBase(e.target.value)} type="number" min="1" inputMode="numeric" />
+        <small style={{ display: 'block', marginTop: 6, color: 'var(--muted)' }}>
+          Pay on solve — you send NIM from Nimiq Pay when you accept a merged PR. No platform escrow.
+        </small>
       </div>
 
       <button className="btn primary" disabled={!valid || busy || !walletAddress} type="submit">
-        {paymentMode === 'prepaid' ? `Fund & publish · ${base || 0} NIM` : 'Publish'}
+        Sign promise & publish
       </button>
       {!walletAddress && (
         <button type="button" className="btn" onClick={onNeedWallet}>
@@ -1283,8 +1363,8 @@ function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onCl
       <div className="detail-head">
         <div className="meta">
           <StatusBadge status={b.status} />
-          <ModeBadge mode={b.paymentMode} />
-          <span className="badge type">{b.kind}</span>
+          <ModeBadge />
+          <span className="badge type">⌥ github</span>
           {b.repo && <span>{b.repo}</span>}
           {b.issueNumber != null && <span>issue #{b.issueNumber}</span>}
           {b.issueAssignees?.length > 0 && <span className="badge review">assignee only</span>}
@@ -1309,37 +1389,54 @@ function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onCl
             )}
           </span>
         </div>
-        <div className="kv">
-          <div>
-            <span>In the pot</span>
-            <b>{pot.toLocaleString()} NIM</b>
-          </div>
-          <div>
-            <span>Mode</span>
-            <b>{b.paymentMode === 'prepaid' ? 'Prepaid' : 'On solve'}</b>
-          </div>
-          <div>
-            <span>Claims</span>
-            <b>{b.claims.length}</b>
-          </div>
-          <div>
-            <span>Pay on</span>
-            <b>Merge</b>
-          </div>
-        </div>
+      </div>
+
+      <div className="panel-box reward-panel">
+        <p className="reward-label">Reward</p>
+        <p className="reward-total">
+          {pot.toLocaleString()}
+          <i>NIM</i>
+        </p>
+        <p className="reward-label" style={{ marginTop: 14 }}>
+          Contributions
+        </p>
+        <ul className="contrib-list">
+          {(b.promises || []).map((p) => (
+            <li key={p.id} className="contrib-row">
+              <span className="contrib-avatar" aria-hidden="true">
+                {(p.githubUser || p.by || '?').slice(0, 1).toUpperCase()}
+              </span>
+              <span className="contrib-who">
+                {p.githubUser ? `@${p.githubUser}` : shortAddr(p.by)}
+                {p.role === 'creator' && <span className="contrib-role">creator</span>}
+                <span className="badge promised">Promised</span>
+                {p.signature ? null : <span className="badge review">unsigned</span>}
+              </span>
+              <span className="contrib-amt">
+                {Number(p.amount).toLocaleString()}
+                <i>NIM</i>
+              </span>
+            </li>
+          ))}
+          {(!b.promises || b.promises.length === 0) && (
+            <li className="contrib-row muted" style={{ fontSize: 14 }}>
+              No promises yet
+            </li>
+          )}
+        </ul>
 
         {canTopup && (
-          <div className="row">
+          <div className="row" style={{ marginTop: 12 }}>
             <input
               value={topAmt}
               onChange={(e) => setTopAmt(e.target.value)}
               type="number"
               min="1"
-              aria-label="Top-up amount"
+              aria-label="Promise amount"
               className="num-input"
             />
             <button className="btn small" disabled={busy} onClick={() => onTopup(topAmt)}>
-              Crowdfund +{topAmt || 0} NIM
+              Promise +{topAmt || 0} NIM
             </button>
           </div>
         )}
@@ -1349,6 +1446,19 @@ function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onCl
               Retract bounty
             </button>
           </div>
+        )}
+        {canClaim && (
+          <button
+            type="button"
+            className="btn primary claim-bounty-btn"
+            disabled={busy}
+            onClick={() => {
+              const el = document.getElementById('c-pr');
+              if (el) el.focus();
+            }}
+          >
+            Claim bounty
+          </button>
         )}
       </div>
 
@@ -1387,7 +1497,7 @@ function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onCl
                     onClick={() => onDecide(c.id, true)}
                     title={merged ? undefined : 'PR must be merged first'}
                   >
-                    {merged ? `Pay · relayer ${pot} NIM` : 'Wait for merge'}
+                    {merged ? `Pay ${pot} NIM` : 'Wait for merge'}
                   </button>
                   {merged && (
                     <button className="btn small ghost" disabled={busy} onClick={() => onDecide(c.id, false)}>
@@ -1428,7 +1538,7 @@ function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onCl
         )}
         {b.status === 'paid' && (
           <div className="notice" style={{ marginTop: 12 }}>
-            Complete · relayer paid.
+            Complete · paid.
           </div>
         )}
         {b.status === 'retracted' && (
@@ -1451,7 +1561,6 @@ function Dashboard({
   onOpen,
   onProfileSave,
   wallet,
-  treasury,
 }) {
   const mine = bounties.filter((b) => b.creator === me);
   const myClaims = bounties.flatMap((b) =>
@@ -1556,7 +1665,7 @@ function Dashboard({
               <div key={b.id} className="claim">
                 <div className="meta">
                   <StatusBadge status={b.status} />
-                  <ModeBadge mode={b.paymentMode} />
+                  <ModeBadge />
                   <span>{bountyTotal(b).toLocaleString()} NIM</span>
                 </div>
                 <button className="link-btn" onClick={() => onOpen(b.id)}>
@@ -1683,9 +1792,8 @@ function Dashboard({
                   {wallet.hasRealAddress ? '' : ' (preview address)'}
                 </p>
               )}
-              <p style={{ margin: '0 0 8px', fontSize: 12, overflowWrap: 'anywhere', color: 'var(--muted)' }}>
-                Escrow: {treasury || '—'}
-                {isDemoAddress(treasury) ? ' · set VITE_TREASURY_ADDRESS to a real NQ address' : ''}
+              <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--muted)' }}>
+                Payments: on-solve only. Creator sends from Nimiq Pay on accept. No platform custody.
               </p>
               {!wallet?.inPay && (
                 <button type="button" className="btn" onClick={() => wallet?.openInPay?.()}>

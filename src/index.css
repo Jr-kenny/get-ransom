@@ -240,6 +240,141 @@ a.btn.primary, a.btn { text-decoration: none; display: inline-flex; align-items:
 .warn { color: var(--review); }
 .bad { color: #e08a8a; }
 
+/* ---------- reward / contributions (Algora-style) ---------- */
+.reward-panel .reward-label {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 400;
+}
+.reward-panel .reward-total {
+  margin: 0;
+  font-size: clamp(36px, 8vw, 48px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--lamp);
+  line-height: 1.1;
+}
+.reward-panel .reward-total i {
+  font-style: normal;
+  font-size: 0.4em;
+  margin-left: 8px;
+  color: var(--muted);
+  font-weight: 400;
+  vertical-align: middle;
+}
+.contrib-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+.contrib-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.contrib-row:first-child { border-top: 0; }
+.contrib-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 217, 138, 0.15);
+  color: var(--lamp);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.contrib-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+.contrib-role {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.contrib-amt {
+  font-variant-numeric: tabular-nums;
+  color: var(--lamp);
+  white-space: nowrap;
+}
+.contrib-amt i {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.badge.promised {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--foam);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.claim-bounty-btn {
+  width: 100%;
+  margin-top: 14px;
+  min-height: 48px;
+  font-size: 16px;
+}
+.promise-modal .promise-amount {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+.promise-modal .promise-amount span {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.promise-modal .promise-amount b {
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--lamp);
+}
+.promise-modal .promise-amount i {
+  font-style: normal;
+  font-size: 14px;
+  color: var(--muted);
+  margin-left: 6px;
+  font-weight: 400;
+}
+.promise-message {
+  margin: 0 0 12px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--foam);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow: auto;
+}
+
 /* ---------- dashboard sidebar ---------- */
 .dash { display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start; }
 .dash-side {
