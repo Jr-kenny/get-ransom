@@ -4,10 +4,9 @@ export const LUNA_PER_NIM = 100_000;
 
 const TREASURY_KEY = 'gr-treasury';
 
-/** Platform-maintained escrow. Users never enter this. */
+/** Optional platform treasury address from env. Not used for custody in v1. */
 export const PLATFORM_TREASURY =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TREASURY_ADDRESS) ||
-  'NQ07 PLAT ESCROW DEMO0001';
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TREASURY_ADDRESS) || '';
 
 let nimiqPromise = null;
 
@@ -186,17 +185,13 @@ export async function listNimiqAccounts() {
 
 /**
  * Sign a bounty promise with the Nimiq wallet (native confirm in Pay).
- * Browser preview returns a mock signature so UI can flow without a chain.
+ * Throws when not inside Nimiq Pay. Production has no preview signature path.
  */
 export async function signNimiqMessage(message) {
   const text = String(message || '');
   if (!text.trim()) throw new Error('Nothing to sign');
   if (!inNimiqPay()) {
-    return {
-      method: 'preview',
-      publicKey: '',
-      signature: `preview-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
-    };
+    throw new Error('Open this mini app inside Nimiq Pay to sign a promise');
   }
   const nimiq = await connectNimiq(10_000);
   const result = unwrap(await nimiq.sign(text), 'Sign');
@@ -247,7 +242,7 @@ export function githubClientId() {
 export function beginGitHubOAuth() {
   const clientId = githubClientId();
   if (!clientId) return null;
-  const state = mockTxHash('gh');
+  const state = randomState();
   try {
     sessionStorage.setItem('gr-gh-oauth-state', state);
   } catch { /* noop */ }
@@ -308,17 +303,6 @@ export async function exchangeGitHubCode(code) {
     avatar: user.avatar || '',
     name: user.name || '',
     payoutWallet: user.payoutWallet || '',
-  };
-}
-
-export function demoConnectGitHub() {
-  // Browser preview only — production must use OAuth (VITE_GITHUB_CLIENT_ID).
-  const login = `keeper-${Math.random().toString(36).slice(2, 8)}`;
-  return {
-    login,
-    id: Math.floor(Math.random() * 1e9),
-    avatar: '',
-    method: 'preview',
   };
 }
 
@@ -388,6 +372,12 @@ export function isAssignedTo(assignees, githubUser) {
   return assignees.some((a) => String(a).toLowerCase() === want);
 }
 
-export function mockTxHash(prefix = 'mock') {
-  return `${prefix}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+function randomState() {
+  try {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+  }
 }

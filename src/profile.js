@@ -83,23 +83,3 @@ export async function disconnectGitHub() {
   await apiLogout();
   return clearProfileCache();
 }
-
-/** Browser-only payout stub when not inside Nimiq Pay. */
-export async function relayerPayout({ to, nim, memo }) {
-  if (!to || !String(to).trim()) {
-    throw new Error('Hunter has no payout wallet saved');
-  }
-  const amount = Number(nim);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error('Invalid payout amount');
-  }
-  await new Promise((r) => setTimeout(r, 200));
-  return {
-    method: 'browser',
-    txHash: `browser-${Date.now().toString(36)}`,
-    to: String(to).trim(),
-    nim: amount,
-    memo: memo || '',
-    at: new Date().toISOString(),
-  };
-}

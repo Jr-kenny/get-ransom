@@ -19,14 +19,11 @@ export {
   lunaToNim,
   getTreasuryAddress,
   setTreasuryAddress,
-  mockTxHash,
-  LUNA_PER_NIM,
   PLATFORM_TREASURY,
   fetchGitHubUser,
   beginGitHubOAuth,
   readGitHubOAuthReturn,
   githubClientId,
-  demoConnectGitHub,
   exchangeGitHubCode,
 } from './payments.js';
 
@@ -37,5 +34,4 @@ export {
   loadProfileFromServer,
   persistPayoutWallet,
   disconnectGitHub,
-  relayerPayout,
 } from './profile.js';

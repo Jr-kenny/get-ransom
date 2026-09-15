@@ -27,11 +27,9 @@ import {
   importGitHubIssue,
   importGitHubPull,
   isAssignedTo,
-  mockTxHash,
   loadProfileCache,
   loadProfileFromServer,
   persistPayoutWallet,
-  relayerPayout,
   beginGitHubOAuth,
   readGitHubOAuthReturn,
   githubClientId,
@@ -102,7 +100,7 @@ function PromiseModal({ flow, wallet, profile, onCancel, onConfirm, busy }) {
         </pre>
         <p className="muted" style={{ fontSize: 12, margin: '0 0 12px' }}>
           Signed as {profile.githubConnected ? `@${profile.githubUser}` : 'wallet'} ·{' '}
-          {wallet?.inPay ? 'Nimiq Pay will ask you to confirm' : 'browser preview signature'}
+          {wallet?.inPay ? 'Nimiq Pay will ask you to confirm' : 'Open in Nimiq Pay to sign'}
         </p>
         <div className="row">
           <button type="button" className="btn primary" disabled={busy} onClick={onConfirm}>
@@ -183,13 +181,6 @@ function useWallet() {
     }
   }, [persist]);
 
-  const connectMock = useCallback(() => {
-    const mock = `NQ${Math.floor(Math.random() * 90 + 10)} ${Date.now().toString(36).slice(-4).toUpperCase()} DEMO`;
-    persist(mock);
-    setProviderState('ready');
-    return mock;
-  }, [persist]);
-
   const disconnect = useCallback(() => {
     persist('');
     setProviderState(inNimiqPay() ? 'ready' : 'browser');
@@ -206,7 +197,6 @@ function useWallet() {
     providerState,
     connecting,
     connectReal,
-    connectMock,
     disconnect,
     openInPay,
     setAddress: persist,
@@ -285,19 +275,19 @@ function ProfileMenu({ wallet, profile, setRoute, onDisconnect }) {
     <div className="profile-wrap" ref={ref}>
       {!wallet.address ? (
         <div className="wallet-actions">
-          <button
-            className="btn small primary"
-            disabled={wallet.connecting}
-            onClick={async () => {
-              try {
-                await wallet.connectReal();
-              } catch {
-                wallet.connectMock();
-              }
-            }}
-          >
-            {wallet.connecting ? 'Connecting…' : wallet.inPay ? 'Connect wallet' : 'Connect (demo)'}
-          </button>
+          {wallet.inPay ? (
+            <button
+              className="btn small primary"
+              disabled={wallet.connecting}
+              onClick={() => wallet.connectReal().catch(() => {})}
+            >
+              {wallet.connecting ? 'Connecting…' : 'Connect wallet'}
+            </button>
+          ) : (
+            <button className="btn small primary" onClick={wallet.openInPay}>
+              Open in Nimiq Pay
+            </button>
+          )}
         </div>
       ) : (
         <button
@@ -898,9 +888,7 @@ export default function App() {
               className="btn"
               onClick={() => {
                 if (!wallet.address && wallet.inPay) {
-                  wallet.connectReal().catch(() => wallet.connectMock());
-                } else if (!wallet.address) {
-                  wallet.connectMock();
+                  wallet.connectReal().catch(() => {});
                 }
                 setRoute({ name: 'create' });
               }}
@@ -989,7 +977,7 @@ export default function App() {
           </button>
         </nav>
         <span className="env-pill top-env">
-          {wallet.inPay ? `nimiq pay · ${wallet.lang}` : 'browser preview'}
+          {wallet.inPay ? `nimiq pay · ${wallet.lang}` : 'open in nimiq pay'}
         </span>
         <ProfileMenu
           wallet={wallet}
@@ -1130,10 +1118,10 @@ export default function App() {
             onCreate={requestCreate}
             busy={!!busy}
             onNeedWallet={() => {
-              try {
-                wallet.connectReal();
-              } catch {
-                wallet.connectMock();
+              if (wallet.inPay) {
+                wallet.connectReal().catch(() => {});
+              } else {
+                wallet.openInPay();
               }
             }}
           />
@@ -1849,12 +1837,11 @@ function Dashboard({
               <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--muted)' }}>
                 {wallet?.inPay
                   ? `Connected · ${wallet.lang}${wallet.network?.blockNumber != null ? ` · block ${wallet.network.blockNumber}` : ''}${wallet.network?.consensus === false ? ' · waiting for consensus' : ''}`
-                  : 'Browser preview — mock wallet only. Open in Nimiq Pay for real NIM.'}
+                  : 'Wallet actions require Nimiq Pay. Open this mini app there to connect, sign, and send NIM.'}
               </p>
-              {wallet?.address && (
+              {wallet?.address && wallet.hasRealAddress && (
                 <p style={{ margin: '0 0 8px', fontSize: 12, overflowWrap: 'anywhere', color: 'var(--muted)' }}>
                   Wallet: {wallet.address}
-                  {wallet.hasRealAddress ? '' : ' (preview address)'}
                 </p>
               )}
               <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--muted)' }}>
