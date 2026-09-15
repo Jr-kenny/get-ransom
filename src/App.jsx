@@ -1084,6 +1084,7 @@ export default function App() {
                     <span className="badge type">⌥ github</span>
                     {b.repo && <span>{b.repo}</span>}
                     {b.issueNumber != null && <span>issue #{b.issueNumber}</span>}
+                    {b.requireAssignment && <span className="badge review">assignee only</span>}
                   </div>
                   <h3>{b.title}</h3>
                   <p>
@@ -1093,17 +1094,6 @@ export default function App() {
                   <div className="amount">
                     {bountyTotal(b).toLocaleString()}
                     <i>NIM</i>
-                  </div>
-                  <div className="meta">
-                    <span>{b.claims.length} claims</span>
-                    <span>·</span>
-                    <span>{b.topups.length} top-ups</span>
-                    {b.requireAssignment && (
-                      <>
-                        <span>·</span>
-                        <span>assignment required</span>
-                      </>
-                    )}
                   </div>
                   <div className="card-foot">
                     <button className="btn small primary" onClick={() => setRoute({ name: 'detail', id: b.id })}>
