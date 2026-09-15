@@ -57,7 +57,10 @@ export default async function handler(req, res) {
       issueUrl: String(body.issueUrl || '').trim(),
       issueNumber: body.issueNumber ?? null,
       issueAssignees: Array.isArray(body.issueAssignees) ? body.issueAssignees.slice(0, 20) : [],
-      requireAssignment: Array.isArray(body.issueAssignees) && body.issueAssignees.length > 0,
+      requireAssignment:
+        !!body.requireAssignment &&
+        Array.isArray(body.issueAssignees) &&
+        body.issueAssignees.length > 0,
       tags: Array.isArray(body.tags) ? body.tags.slice(0, 5) : [],
       paymentMode: 'on-solve',
       base,

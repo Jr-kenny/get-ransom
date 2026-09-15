@@ -540,6 +540,7 @@ export default function App() {
         issueUrl: data.issueUrl,
         issueNumber: data.issueNumber,
         issueAssignees: data.issueAssignees,
+        requireAssignment: data.requireAssignment,
         tags: data.tags,
         base: data.base,
         promise: {
@@ -676,7 +677,11 @@ export default function App() {
       return;
     }
 
-    if (assigned.length > 0 && !isAssignedTo(assigned, ghUser)) {
+    if (
+      bounty.requireAssignment &&
+      assigned.length > 0 &&
+      !isAssignedTo(assigned, ghUser)
+    ) {
       setToast(`Issue is assigned to ${assigned.join(', ')} — only they can claim.`);
       setBusy('');
       return;
@@ -1200,6 +1205,7 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
   const [tags, setTags] = useState('');
   const [issueNumber, setIssueNumber] = useState(null);
   const [issueAssignees, setIssueAssignees] = useState([]);
+  const [requireAssignment, setRequireAssignment] = useState(false);
   const [base, setBase] = useState('250');
 
   const valid =
@@ -1207,7 +1213,8 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
     body.trim().length >= 20 &&
     Number(base) >= 1 &&
     !!imported &&
-    repo.trim().length > 2;
+    repo.trim().length > 2 &&
+    (!requireAssignment || issueAssignees.length > 0);
 
   async function handleImport() {
     setImporting(true);
@@ -1221,6 +1228,7 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
       setTags(data.tags.join(', '));
       setIssueNumber(data.issueNumber);
       setIssueAssignees(data.assignees);
+      setRequireAssignment(data.assignees.length > 0);
       setImportMsg(`Imported ${data.repo}#${data.issueNumber}`);
     } catch (err) {
       setImported(null);
@@ -1248,6 +1256,7 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
             issueUrl: imported?.issueUrl || issueUrl,
             issueNumber,
             issueAssignees,
+            requireAssignment: requireAssignment && issueAssignees.length > 0,
             tags: tags
               .split(',')
               .map((t) => t.trim())
@@ -1297,6 +1306,25 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
           </div>
           <h3 style={{ margin: '8px 0 0', fontWeight: 400, fontSize: 20 }}>{imported.title}</h3>
         </div>
+      )}
+
+      {imported && (
+        <label className="check-row" style={{ marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={requireAssignment}
+            onChange={(e) => setRequireAssignment(e.target.checked)}
+            disabled={imported.assignees.length === 0}
+          />
+          <span>
+            <b style={{ fontWeight: 500 }}>Only GitHub assignees can claim</b>
+            <span className="muted" style={{ display: 'block', marginTop: 2, fontSize: 12 }}>
+              {imported.assignees.length > 0
+                ? `Locked to ${imported.assignees.join(', ')}. Assign the issue on GitHub to change this.`
+                : 'This issue has no assignees yet. Assign someone on GitHub, then re-import.'}
+            </span>
+          </span>
+        </label>
       )}
 
       <div className="field">
