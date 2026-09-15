@@ -12,9 +12,11 @@ Get Ransom
 
 Keep the light on for open work — NIM bounties on GitHub issues, paid on merge in Nimiq Pay.
 
-## Short description
+## Short description (200 char limit)
 
-Import a GitHub issue, sign a NIM promise for the pot, claim with a pull request. The creator pays the hunter from their Nimiq Pay wallet when the PR merges.
+Get Ransom puts NIM bounties on GitHub issues. Import an issue, sign a promise for the pot, claim with a PR. On merge, the creator pays you from Nimiq Pay. No platform escrow.
+
+*(175 characters)*
 
 ## Full description
 
