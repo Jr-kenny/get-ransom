@@ -6,6 +6,7 @@ const SECTIONS = [
   { id: 'promises', label: 'Promises & pay' },
   { id: 'accounts', label: 'Accounts' },
   { id: 'nimiq', label: 'Nimiq Pay' },
+  { id: 'roadmap', label: 'Upcoming' },
   { id: 'faq', label: 'FAQs' },
 ];
 
@@ -313,6 +314,32 @@ export default function DocsPage({ onNavigate }) {
 
         <hr className="doc-rule" />
 
+        <H id="roadmap" level={2}>
+          Upcoming
+        </H>
+        <P>
+          Today money moves on <b>NIM</b> with signed promises and pay-on-merge from the
+          creator&apos;s wallet. Next we want locked pots in stablecoins.
+        </P>
+        <Ul>
+          <li>
+            <b>EVM escrow (USDC / USDT)</b> — Nimiq L1 has no general contracts, but Nimiq Pay
+            exposes <code>window.ethereum</code> for Base, Polygon, and other EVM chains. We plan a
+            bounty escrow contract so funds lock on create and can only go to the hunter (or
+            refund on timeout), not a platform hot wallet.
+          </li>
+          <li>
+            <b>Why not live yet</b> — mini-app ERC-20 sends need the chain&apos;s native gas token
+            (no Pay gas abstraction). We need the contract, a keeper/oracle call on merge, and a
+            clean dual-currency UI before we ship it.
+          </li>
+          <li>
+            <b>Until then</b> — use NIM. Promises are public and signed; they are not escrow.
+          </li>
+        </Ul>
+
+        <hr className="doc-rule" />
+
         <H id="faq" level={2}>
           FAQs
         </H>
@@ -330,7 +357,8 @@ export default function DocsPage({ onNavigate }) {
 
         <H level={3}>Is the pot locked?</H>
         <P>
-          No. Promises are signed commitments. Coins move only when the creator pays on accept.
+          No on NIM today. Promises are signed commitments. Coins move only when the creator pays
+          on accept. Locked EVM escrow (USDC/USDT) is listed under Upcoming.
         </P>
 
         <H level={3}>Why connect GitHub?</H>
