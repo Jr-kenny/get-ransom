@@ -24,9 +24,10 @@ Payments are **on-solve only**: no platform escrow. The creator’s Nimiq Pay wa
 ## Stack
 
 - React 19 + Vite
-- `@nimiq/mini-app-sdk` (wallet, payments inside Nimiq Pay)
-- GitHub REST API (issue / PR import) + GitHub OAuth (Connect GitHub)
-- Local state in `localStorage` for v1; prepaid escrow sends go to `VITE_TREASURY_ADDRESS`
+- `@nimiq/mini-app-sdk` (wallet, payments, message signing inside Nimiq Pay)
+- GitHub OAuth (httpOnly session cookie) + REST
+- **Upstash Redis** — shared users, payout wallets, bounties, promises, claims
+- Vercel serverless API (`/api/*`)
 
 ## Develop
 
@@ -35,16 +36,17 @@ npm install
 npm run dev -- --host
 ```
 
-Open the Network URL in **Nimiq Pay** (same Wi-Fi) for real wallet actions. Desktop browser uses mock connect and mock chain receipts.
+API routes need the same env as production (or Vercel CLI). Open the Network URL in **Nimiq Pay** for real wallet actions.
 
 ### Real NIM inside Nimiq Pay
 
 | Action | What happens |
 |--------|----------------|
-| **Connect wallet** | `listAccounts()` — native confirm, returns your NQ address |
-| **Sign promise** | `sign()` — modal on publish / pledge; stored on the bounty |
-| **Accept claim (pay)** | Creator wallet → hunter payout address via `sendBasicTransactionWithData` |
-| **Browser preview** | Mock wallet + preview signature / receipts only |
+| **Connect GitHub** | OAuth → server session cookie; profile lives in Redis |
+| **Save payout wallet** | `PATCH /api/me` — validated NQ address, stored server-side |
+| **Connect wallet** | `listAccounts()` — native confirm |
+| **Sign promise** | `sign()` modal on publish / pledge; stored on the bounty |
+| **Accept claim (pay)** | Creator wallet → hunter payout via `sendBasicTransactionWithData`, then `PATCH` bounty |
 
 Share in Pay: `https://nimpay.app/miniapps/open/get-ransom.vercel.app`
 
@@ -53,14 +55,25 @@ Share in Pay: `https://nimpay.app/miniapps/open/get-ransom.vercel.app`
 - Deploy: Vercel (`get-ransom.vercel.app`)
 - Share in Pay: `https://nimpay.app/miniapps/open/get-ransom.vercel.app`
 
-## Env (when wiring for real)
+## Env
+
+Frontend:
 
 ```bash
-VITE_GITHUB_CLIENT_ID=      # GitHub OAuth App client id
-VITE_GITHUB_REDIRECT_URI=   # must match OAuth App callback exactly, e.g. https://get-ransom.vercel.app
+VITE_GITHUB_CLIENT_ID=
+VITE_GITHUB_REDIRECT_URI=https://get-ransom.vercel.app
 ```
 
-Server-side (never in the client bundle): `GITHUB_CLIENT_SECRET`, relayer key, webhooks.
+Server (Vercel → Project → Settings → Environment Variables):
+
+```bash
+GITHUB_CLIENT_SECRET=
+SESSION_SECRET=                 # long random string
+UPSTASH_REDIS_REST_URL=         # from Upstash console
+UPSTASH_REDIS_REST_TOKEN=
+```
+
+Identity and payout wallets are **never** stored in `localStorage` as source of truth — only a paint cache.
 
 ## Docs
 
