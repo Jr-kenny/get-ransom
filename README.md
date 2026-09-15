@@ -23,8 +23,8 @@ Get Ransom is a Nimiq Pay mini-app bounty hub. Paste a public GitHub issue, fund
 
 - React 19 + Vite
 - `@nimiq/mini-app-sdk` (wallet, payments inside Nimiq Pay)
-- GitHub REST API (issue / PR import)
-- Local state in `localStorage` for v1; escrow + relayer are stubbed until the backend lands
+- GitHub REST API (issue / PR import) + GitHub OAuth (Connect GitHub)
+- Local state in `localStorage` for v1; prepaid escrow sends go to `VITE_TREASURY_ADDRESS`
 
 ## Develop
 
@@ -34,6 +34,17 @@ npm run dev -- --host
 ```
 
 Open the Network URL in **Nimiq Pay** (same Wi-Fi) for real wallet actions. Desktop browser uses mock connect and mock chain receipts.
+
+### Real NIM inside Nimiq Pay
+
+| Action | What happens |
+|--------|----------------|
+| **Connect wallet** | `listAccounts()` — native confirm, returns your NQ address |
+| **Prepaid fund / crowdfund** | `sendBasicTransactionWithData` → escrow (`VITE_TREASURY_ADDRESS`) |
+| **Accept claim (pay)** | Creator wallet → hunter payout address via `sendBasicTransactionWithData` |
+| **Browser preview** | Mock wallet + preview receipts only |
+
+Share in Pay: `https://nimpay.app/miniapps/open/get-ransom.vercel.app`
 
 ## Production
 
@@ -45,7 +56,7 @@ Open the Network URL in **Nimiq Pay** (same Wi-Fi) for real wallet actions. Desk
 ```bash
 VITE_GITHUB_CLIENT_ID=      # GitHub OAuth App client id
 VITE_GITHUB_REDIRECT_URI=   # must match OAuth App callback exactly, e.g. https://get-ransom.vercel.app
-VITE_TREASURY_ADDRESS=      # platform escrow NIM address
+VITE_TREASURY_ADDRESS=      # real user-friendly NIM address for prepaid escrow (NQ…)
 ```
 
 Server-side (never in the client bundle): `GITHUB_CLIENT_SECRET`, relayer key, webhooks.
