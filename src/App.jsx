@@ -960,7 +960,15 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <button className="brand" onClick={() => setRoute({ name: 'landing' })} aria-label="Back to landing">
-          <span className="brand-dot" aria-hidden="true" />
+          <span className="brand-dot" aria-hidden="true">
+            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M32 10v4" stroke="#ffd98a" strokeWidth="3" strokeLinecap="round" />
+              <rect x="26" y="14" width="12" height="24" rx="3" fill="#0b1a30" stroke="#ffd98a" strokeWidth="3" />
+              <circle cx="32" cy="26" r="5" fill="#ffd98a" />
+              <path d="M28 38h8l3 10H25l3-10z" fill="#12314a" stroke="#6f8794" strokeWidth="2" />
+              <path d="M22 50h20" stroke="#ffd98a" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          </span>
           <span>
             <b>Get Ransom</b>
             <span>bounty hub · nimiq</span>

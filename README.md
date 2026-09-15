@@ -2,32 +2,67 @@
 
 **Keep the light on for open work.**
 
-Get Ransom is a Nimiq Pay mini-app bounty hub. Paste a public GitHub issue, sign a NIM promise for the pot, let others pledge, and pay hunters when their PR merges. Identity is a connected GitHub login (shared across devices). Payouts go from the creator's Nimiq Pay wallet to the hunter's saved NQ address. No platform escrow.
+Get Ransom is a **Nimiq Pay** mini-app that puts a **NIM bounty** on any public GitHub issue. Hunters ship a pull request. When the keeper accepts a **merged** PR, they pay from their own Nimiq Pay wallet — on-chain, no Stripe, no paste-a-handle identity.
 
-**Live:** [get-ransom.vercel.app](https://get-ransom.vercel.app)
+**Live:** [get-ransom.vercel.app](https://get-ransom.vercel.app)  
+**Open in Pay:** [nimpay.app/miniapps/open/get-ransom.vercel.app](https://nimpay.app/miniapps/open/get-ransom.vercel.app)
 
-## Short description
+---
 
-> Post NIM bounties on GitHub issues, grow the pot with signed promises, claim with a PR. Paid on merge from the creator's Nimiq Pay wallet.
+## Why it exists
 
-## What it does
+Open source work is full of hard bugs and thin motivation. Labels and “good first issue” threads do not move a maintainer’s worst ticket. A **visible pot** does.
 
-| Role | Flow |
-|------|------|
-| **Creator** | Import GitHub issue → set pot → **sign promise** (modal) → publish → review claims → pay on merge |
-| **Hunter** | Connect GitHub + payout wallet → open a PR → claim with PR URL → get NIM on merge/accept |
-| **Anyone** | Sign a **promise** toward the pot (shown under Contributions) |
-| **Repo owner** | Optional GitHub App for bot comments; assignee lock for trusted solvers |
+Get Ransom makes that pot:
 
-Payments are **on-solve only**: no platform escrow. The creator’s Nimiq Pay wallet sends the reward when they accept a merged PR. Nimiq has no general contracts for merge-conditioned escrow; a hot treasury would mean custody of user funds.
+- **Public** — anyone can see the reward and who promised what  
+- **Accountable** — promises and GitHub identity are signed / OAuth-bound  
+- **Honest about custody** — today the creator pays on merge from their wallet; we do **not** run a hot escrow  
+
+## The product in one loop
+
+```text
+GitHub issue  →  signed NIM promise  →  PR claim  →  merge  →  creator pays in Pay
+```
+
+| Who | What they do |
+|-----|----------------|
+| **Creator** | Import issue → set NIM amount → **sign promise** → optional assignee lock → review PRs → **Pay** on merge |
+| **Hunter** | Connect GitHub + payout NQ address → open PR → **Claim** with PR URL → get NIM |
+| **Anyone** | **Promise +N** — grows the pot and shows under Contributions |
+| **Maintainer** | Assign the issue on GitHub if you want an assignee-only lock |
+
+## What makes it feel real
+
+- **Nimiq Pay native** — `listAccounts`, `sign` (promises), `sendBasicTransactionWithData` (payouts) with native confirm dialogs  
+- **Cross-device accounts** — Connect GitHub anywhere; payout wallet and history come back from the server  
+- **Shared board** — bounties, promises, and claims live in Redis, not one phone’s localStorage  
+- **Claim modal** — paste a PR URL; other submitted PRs listed underneath  
+- **Markdown issue bodies** — GitHub write-ups render as headings, lists, and code  
+
+## Honest money model (v1)
+
+| | |
+|--|--|
+| **Currency** | **NIM** (1 NIM = 100,000 Luna) |
+| **Promises** | Signed messages, not locked coins |
+| **Payout** | Creator’s wallet → hunter’s saved NQ address on accept of a merged PR |
+| **Platform custody** | **None** — we never hold user NIM |
+
+Why not prepaid on NIM L1: Nimiq has no general smart contracts (only vesting / HTLC / staking). A platform treasury would mean **we** custody funds. We chose not to.
+
+### Upcoming: EVM escrow (USDC / USDT)
+
+Nimiq Pay also injects `window.ethereum` for Base, Polygon, and other EVM chains. Next we want a **bounty escrow contract** so pots lock on create and can only pay the hunter (or refund on timeout) — not a hot wallet.
+
+Tracked in in-app **Docs → Upcoming**. Mini-app ERC-20 sends still need the chain’s gas token (no Pay gas abstraction), so dual-currency ships with the contract + keeper path, not as a half-feature.
 
 ## Stack
 
-- React 19 + Vite
-- `@nimiq/mini-app-sdk` (wallet, payments, message signing inside Nimiq Pay)
-- GitHub OAuth (httpOnly session cookie) + REST
-- **Upstash Redis** — shared users, payout wallets, bounties, promises, claims
-- Vercel serverless API (`/api/*`)
+- React 19 + Vite  
+- `@nimiq/mini-app-sdk`  
+- GitHub OAuth (httpOnly session)  
+- Upstash Redis + Vercel serverless API  
 
 ## Develop
 
@@ -36,26 +71,9 @@ npm install
 npm run dev -- --host
 ```
 
-API routes need the same env as production (or Vercel CLI). Open the Network URL in **Nimiq Pay** for real wallet actions.
+Open the Network URL in **Nimiq Pay** (same Wi-Fi) for wallet actions. Desktop browser is browse + GitHub connect; real NIM needs Pay.
 
-### Real NIM inside Nimiq Pay
-
-| Action | What happens |
-|--------|----------------|
-| **Connect GitHub** | OAuth → server session cookie; profile lives in Redis |
-| **Save payout wallet** | `PATCH /api/me` — validated NQ address, stored server-side |
-| **Connect wallet** | `listAccounts()` — native confirm |
-| **Sign promise** | `sign()` modal on publish / pledge; stored on the bounty |
-| **Accept claim (pay)** | Creator wallet → hunter payout via `sendBasicTransactionWithData`, then `PATCH` bounty |
-
-Share in Pay: `https://nimpay.app/miniapps/open/get-ransom.vercel.app`
-
-## Production
-
-- Deploy: Vercel (`get-ransom.vercel.app`)
-- Share in Pay: `https://nimpay.app/miniapps/open/get-ransom.vercel.app`
-
-## Env
+### Env
 
 Frontend:
 
@@ -64,20 +82,20 @@ VITE_GITHUB_CLIENT_ID=
 VITE_GITHUB_REDIRECT_URI=https://get-ransom.vercel.app
 ```
 
-Server (Vercel → Project → Settings → Environment Variables):
+Server (Vercel):
 
 ```bash
 GITHUB_CLIENT_SECRET=
-SESSION_SECRET=                 # long random string
-UPSTASH_REDIS_REST_URL=         # from Upstash console
+SESSION_SECRET=
+UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
 ```
 
-Identity and payout wallets are **never** stored in `localStorage` as source of truth — only a paint cache.
+## Share
 
-## Docs
-
-In-app **Docs** covers hunters, creators, repository owners, the GitHub App, and Nimiq payouts.
+```
+https://nimpay.app/miniapps/open/get-ransom.vercel.app
+```
 
 ---
 
