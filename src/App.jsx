@@ -216,20 +216,8 @@ function useWallet() {
   };
 }
 
-function GitHubConnect({ profile, onProfileSave, compact }) {
+function GitHubConnect({ profile, compact }) {
   const clientId = githubClientId();
-  const [busy, setBusy] = useState(false);
-
-  function applyConnected(user) {
-    onProfileSave({
-      ...profile,
-      githubUser: user.login,
-      githubId: user.id,
-      githubAvatar: user.avatar || '',
-      githubConnected: true,
-      githubConnectedAt: new Date().toISOString().slice(0, 10),
-    });
-  }
 
   if (profile.githubConnected) {
     return (
@@ -241,7 +229,11 @@ function GitHubConnect({ profile, onProfileSave, compact }) {
         )}
         <span>
           <b>@{profile.githubUser}</b>
-          {!compact && <span className="muted"> · bound to this wallet</span>}
+          {!compact && (
+            <span className="muted">
+              {profile.payoutWallet ? ' · account synced' : ' · save payout wallet'}
+            </span>
+          )}
         </span>
       </div>
     );
@@ -252,20 +244,19 @@ function GitHubConnect({ profile, onProfileSave, compact }) {
       <button
         type="button"
         className="btn primary"
-        disabled={busy}
         onClick={() => {
-          if (clientId) {
-            const url = beginGitHubOAuth();
-            if (url) window.location.href = url;
-            return;
-          }
-          setBusy(true);
-          applyConnected(demoConnectGitHub());
-          setBusy(false);
+          if (!clientId) return;
+          const url = beginGitHubOAuth();
+          if (url) window.location.href = url;
         }}
+        disabled={!clientId}
+        title={clientId ? undefined : 'VITE_GITHUB_CLIENT_ID is not set'}
       >
-        {busy ? 'Connecting…' : 'Connect GitHub'}
+        Connect GitHub
       </button>
+      <p className="muted" style={{ margin: '8px 0 0', fontSize: 12 }}>
+        Sign in on any device. Your GitHub account and payout wallet follow you.
+      </p>
     </div>
   );
 }
@@ -475,9 +466,15 @@ export default function App() {
       try {
         await exchangeGitHubCode(ret.code);
         const me = await loadProfileFromServer();
+        const list = await fetchBounties();
         if (cancelled) return;
         setProfile(me);
-        setToast(`Connected @${me.githubUser}`);
+        setBounties(list);
+        setToast(
+          me.payoutWallet
+            ? `Signed in @${me.githubUser} · payout wallet restored`
+            : `Signed in @${me.githubUser} · add a payout wallet in Settings`,
+        );
       } catch (err) {
         if (!cancelled) setToast(err?.message || 'GitHub connect failed');
       } finally {
@@ -535,7 +532,7 @@ export default function App() {
     }
     setBusy('Publishing…');
     try {
-      const { bounty } = await createBountyRemote({
+      const bounty = await createBountyRemote({
         title: data.title,
         body: data.body,
         repo: data.repo,
@@ -1324,7 +1321,10 @@ function CreateForm({ inPay, walletAddress, onCreate, busy, onNeedWallet }) {
 function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onClaim, onDecide, onRetract, onOpenPayouts }) {
   const [topAmt, setTopAmt] = useState('50');
   const [prUrl, setPrUrl] = useState('');
-  const isCreator = b.creator === me;
+  const isCreator =
+    b.creator === me ||
+    (profile.githubUser && b.creatorGithub === profile.githubUser) ||
+    (profile.githubId != null && b.creatorGithubId === profile.githubId);
   const pot = bountyTotal(b);
   const canClaim = b.status === 'open' || b.status === 'review';
   const canTopup = canClaim;
@@ -1536,7 +1536,12 @@ function Dashboard({
   onProfileSave,
   wallet,
 }) {
-  const mine = bounties.filter((b) => b.creator === me);
+  const mine = bounties.filter(
+    (b) =>
+      b.creator === me ||
+      (profile.githubUser && b.creatorGithub === profile.githubUser) ||
+      (profile.githubId != null && b.creatorGithubId === profile.githubId),
+  );
   const myClaims = bounties.flatMap((b) =>
     b.claims
       .filter((c) => c.by === me || (profile.githubUser && c.githubUser === profile.githubUser))
