@@ -68,10 +68,56 @@ function providerError(value) {
   return null;
 }
 
-/** Real NIM payment with optional memo. Throws if not inside Nimiq Pay. */
-export async function sendNim({ recipient, nim, memo }) {
+export function isDemoAddress(addr) {
+  const n = normalizeNimiqAddress(addr);
+  if (!n) return true;
+  if (/DEMO|ESCROW|PLAT|TEST|XXXX|PREVIEW/i.test(n)) return true;
+  return !isValidNimiqAddress(addr);
+}
+
+/** User-friendly NIM address: 36 chars, starts with NQ, spaces allowed. */
+export function isValidNimiqAddress(addr) {
+  const n = normalizeNimiqAddress(addr);
+  // e.g. NQ26 1MYH 6SSQ 2EBV Q0XQ SDPD X9KA HMYB VMTG → 36 chars
+  if (!/^NQ[0-9A-Z]{34}$/.test(n)) return false;
+  if (/DEMO|ESCROW|PLAT|TEST|XXXX|PREVIEW/i.test(n)) return false;
+  return true;
+}
+
+export function normalizeNimiqAddress(addr) {
+  return String(addr || '').replace(/\s+/g, '').toUpperCase();
+}
+
+/** HTTPS deeplink that opens this origin inside Nimiq Pay. */
+export function nimiqPayAppLink(pathname) {
+  try {
+    const origin = window.location.origin.replace(/^https?:\/\//, '');
+    const path = pathname && pathname !== '/' ? pathname.replace(/^\//, '') : '';
+    return `https://nimpay.app/miniapps/open/${origin}${path ? `/${path}` : ''}`;
+  } catch {
+    return 'https://nimpay.app/miniapps/open/get-ransom.vercel.app';
+  }
+}
+
+function unwrap(value, label) {
+  const err = providerError(value);
+  if (err) throw err;
+  if (value && typeof value === 'object' && 'error' in value) {
+    throw new Error(value.error?.message || `${label} failed`);
+  }
+  return value;
+}
+
+/**
+ * Real NIM payment with optional memo. Throws if not inside Nimiq Pay.
+ * recipient must be a valid user-friendly NIM address.
+ */
+export async function sendNim({ recipient, nim, memo, requireConsensus = true }) {
   if (!recipient || !String(recipient).trim()) {
     throw new Error('Missing recipient address');
+  }
+  if (!isValidNimiqAddress(recipient)) {
+    throw new Error('Recipient is not a valid NIM address (NQ…)');
   }
   const amount = Number(nim);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -81,36 +127,61 @@ export async function sendNim({ recipient, nim, memo }) {
     throw new Error('Open this mini app inside Nimiq Pay to send NIM');
   }
   const nimiq = await connectNimiq(10_000);
+  if (requireConsensus) {
+    try {
+      const ok = await nimiq.isConsensusEstablished();
+      if (ok === false) {
+        throw new Error('Nimiq network not ready — wait for consensus and retry');
+      }
+    } catch (err) {
+      if (err instanceof Error && /consensus/i.test(err.message)) throw err;
+      // consensus check optional if provider errors; continue to send
+    }
+  }
   const value = nimToLuna(amount);
-  const payload = {
-    recipient: String(recipient).trim(),
-    value,
-  };
+  const cleanRecipient = normalizeNimiqAddress(recipient);
+  // User-friendly spaced form is what Pay expects
+  const recipientFriendly = cleanRecipient.replace(/(.{4})/g, '$1 ').trim();
+
   if (memo && String(memo).trim()) {
     const result = await nimiq.sendBasicTransactionWithData({
-      ...payload,
+      recipient: recipientFriendly,
+      value,
       data: String(memo).slice(0, 64),
     });
-    const err = providerError(result);
-    if (err) throw err;
-    return typeof result === 'string' ? result : String(result);
+    return String(unwrap(result, 'Payment'));
   }
-  const result = await nimiq.sendBasicTransaction(payload);
-  const err = providerError(result);
-  if (err) throw err;
-  return typeof result === 'string' ? result : String(result);
+  const result = await nimiq.sendBasicTransaction({
+    recipient: recipientFriendly,
+    value,
+  });
+  return String(unwrap(result, 'Payment'));
+}
+
+/** Consensus + height. Requires Nimiq Pay provider (no user confirm). */
+export async function getNimiqNetworkStatus() {
+  if (!inNimiqPay()) {
+    return { consensus: null, blockNumber: null };
+  }
+  const nimiq = await connectNimiq(8000);
+  const [consensus, blockNumber] = await Promise.all([
+    nimiq.isConsensusEstablished(),
+    nimiq.getBlockNumber(),
+  ]);
+  return {
+    consensus: unwrap(consensus, 'Consensus') === true,
+    blockNumber: Number(unwrap(blockNumber, 'Block')) || 0,
+  };
 }
 
 export async function listNimiqAccounts() {
   if (!inNimiqPay()) throw new Error('Not inside Nimiq Pay');
   const nimiq = await connectNimiq(10_000);
-  const accounts = await nimiq.listAccounts();
-  const err = providerError(accounts);
-  if (err) throw err;
+  const accounts = unwrap(await nimiq.listAccounts(), 'Accounts');
   if (!Array.isArray(accounts) || accounts.length === 0) {
     throw new Error('No Nimiq accounts available');
   }
-  return accounts;
+  return accounts.map((a) => String(a));
 }
 
 const ISSUE_RE = /github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/i;
