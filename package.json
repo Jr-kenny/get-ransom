@@ -2,6 +2,7 @@
   "name": "get-ransom",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Nimiq Pay bounty hub — GitHub issues, signed NIM promises, pay on merge from the creator wallet.",
   "type": "module",
   "scripts": {

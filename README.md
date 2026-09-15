@@ -97,6 +97,10 @@ UPSTASH_REDIS_REST_TOKEN=
 https://nimpay.app/miniapps/open/get-ransom.vercel.app
 ```
 
+## License
+
+[MIT](./LICENSE) © 2026 Jr-kenny
+
 ---
 
 Lamp true. Pots honest.

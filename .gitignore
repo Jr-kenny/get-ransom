@@ -26,6 +26,12 @@ dist-ssr
 # Local previews / agent artifacts
 .playwright-mcp
 get-ransom-*.png
+.agents/
+demo/
+demo-*/
+demo-*.png
+videos/
+thumbnails/
 .env
 .env.*
 !.env.example
