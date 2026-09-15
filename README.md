@@ -14,10 +14,12 @@ Get Ransom is a Nimiq Pay mini-app bounty hub. Paste a public GitHub issue, fund
 
 | Role | Flow |
 |------|------|
-| **Creator** | Import issue URL → set pot (pay-on-solve or prepaid) → publish → review claims → accept |
+| **Creator** | Import GitHub issue → set pot → **sign promise** (modal) → publish → review claims → pay on merge |
 | **Hunter** | Connect GitHub + payout wallet → open a PR → claim with PR URL → get NIM on merge/accept |
+| **Anyone** | Sign a **promise** toward the pot (shown under Contributions) |
 | **Repo owner** | Optional GitHub App for bot comments; assignee lock for trusted solvers |
-| **Anyone** | Crowdfund open bounties in NIM |
+
+Payments are **on-solve only**: no platform escrow. The creator’s Nimiq Pay wallet sends the reward when they accept a merged PR. Nimiq has no general contracts for merge-conditioned escrow; a hot treasury would mean custody of user funds.
 
 ## Stack
 
@@ -40,9 +42,9 @@ Open the Network URL in **Nimiq Pay** (same Wi-Fi) for real wallet actions. Desk
 | Action | What happens |
 |--------|----------------|
 | **Connect wallet** | `listAccounts()` — native confirm, returns your NQ address |
-| **Prepaid fund / crowdfund** | `sendBasicTransactionWithData` → escrow (`VITE_TREASURY_ADDRESS`) |
+| **Sign promise** | `sign()` — modal on publish / pledge; stored on the bounty |
 | **Accept claim (pay)** | Creator wallet → hunter payout address via `sendBasicTransactionWithData` |
-| **Browser preview** | Mock wallet + preview receipts only |
+| **Browser preview** | Mock wallet + preview signature / receipts only |
 
 Share in Pay: `https://nimpay.app/miniapps/open/get-ransom.vercel.app`
 
@@ -56,7 +58,6 @@ Share in Pay: `https://nimpay.app/miniapps/open/get-ransom.vercel.app`
 ```bash
 VITE_GITHUB_CLIENT_ID=      # GitHub OAuth App client id
 VITE_GITHUB_REDIRECT_URI=   # must match OAuth App callback exactly, e.g. https://get-ransom.vercel.app
-VITE_TREASURY_ADDRESS=      # real user-friendly NIM address for prepaid escrow (NQ…)
 ```
 
 Server-side (never in the client bundle): `GITHUB_CLIENT_SECRET`, relayer key, webhooks.
