@@ -43,7 +43,8 @@ Open the Network URL in **Nimiq Pay** (same Wi-Fi) for real wallet actions. Desk
 ## Env (when wiring for real)
 
 ```bash
-VITE_GITHUB_CLIENT_ID=      # GitHub OAuth
+VITE_GITHUB_CLIENT_ID=      # GitHub OAuth App client id
+VITE_GITHUB_REDIRECT_URI=   # must match OAuth App callback exactly, e.g. https://get-ransom.vercel.app
 VITE_TREASURY_ADDRESS=      # platform escrow NIM address
 ```
 

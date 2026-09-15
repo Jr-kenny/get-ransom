@@ -154,14 +154,23 @@ export function beginGitHubOAuth() {
   try {
     sessionStorage.setItem('gr-gh-oauth-state', state);
   } catch { /* noop */ }
-  const redirect = `${window.location.origin}${window.location.pathname}`;
-  const url =
-    `https://github.com/login/oauth/authorize` +
-    `?client_id=${encodeURIComponent(clientId)}` +
-    `&redirect_uri=${encodeURIComponent(redirect)}` +
-    `&scope=read:user` +
-    `&state=${encodeURIComponent(state)}`;
-  return url;
+  // Prefer explicit env; else origin only (no path/trailing slash).
+  // GitHub OAuth Apps require an exact match with the app's callback URL.
+  // Omitting redirect_uri also works if the app has a single callback set.
+  let redirect = '';
+  try {
+    redirect = import.meta.env.VITE_GITHUB_REDIRECT_URI || '';
+  } catch { /* noop */ }
+  if (!redirect && typeof window !== 'undefined') {
+    redirect = window.location.origin;
+  }
+  const params = new URLSearchParams({
+    client_id: clientId,
+    scope: 'read:user',
+    state,
+  });
+  if (redirect) params.set('redirect_uri', redirect);
+  return `https://github.com/login/oauth/authorize?${params.toString()}`;
 }
 
 export function readGitHubOAuthReturn() {
