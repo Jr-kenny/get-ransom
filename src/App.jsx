@@ -8,6 +8,10 @@ import {
   inNimiqPay,
   sendNim,
   listNimiqAccounts,
+  getNimiqNetworkStatus,
+  isValidNimiqAddress,
+  isDemoAddress,
+  nimiqPayAppLink,
   importGitHubIssue,
   importGitHubPull,
   isAssignedTo,
@@ -51,6 +55,7 @@ function useWallet() {
   });
   const [providerState, setProviderState] = useState('idle');
   const [connecting, setConnecting] = useState(false);
+  const [network, setNetwork] = useState({ consensus: null, blockNumber: null });
 
   const persist = useCallback((addr) => {
     setAddress(addr || '');
@@ -60,6 +65,7 @@ function useWallet() {
     } catch { /* noop */ }
   }, []);
 
+  // init() only — listAccounts() shows a native confirm, so wait for explicit Connect
   useEffect(() => {
     let cancelled = false;
     if (!inNimiqPay()) {
@@ -69,14 +75,13 @@ function useWallet() {
     (async () => {
       setProviderState('connecting');
       try {
-        await connectNimiq(6000);
-        const accounts = await listNimiqAccounts();
-        if (!cancelled && accounts[0]) {
-          persist(accounts[0]);
-          setProviderState('ready');
-        } else if (!cancelled) {
-          setProviderState('ready');
-        }
+        await connectNimiq(8000);
+        if (cancelled) return;
+        setProviderState(address ? 'ready' : 'ready');
+        try {
+          const status = await getNimiqNetworkStatus();
+          if (!cancelled) setNetwork(status);
+        } catch { /* optional */ }
       } catch {
         if (!cancelled) setProviderState(address ? 'ready' : 'error');
       }
@@ -84,7 +89,7 @@ function useWallet() {
     return () => {
       cancelled = true;
     };
-  }, [persist, address]);
+  }, [address]);
 
   const connectReal = useCallback(async () => {
     setConnecting(true);
@@ -95,6 +100,9 @@ function useWallet() {
       if (accounts[0]) {
         persist(accounts[0]);
         setProviderState('ready');
+        try {
+          setNetwork(await getNimiqNetworkStatus());
+        } catch { /* optional */ }
         return accounts[0];
       }
       throw new Error('No accounts in wallet');
@@ -115,6 +123,12 @@ function useWallet() {
     setProviderState(inNimiqPay() ? 'ready' : 'browser');
   }, [persist]);
 
+  const openInPay = useCallback(() => {
+    try {
+      window.location.href = nimiqPayAppLink(window.location.pathname + window.location.search);
+    } catch { /* noop */ }
+  }, []);
+
   return {
     address,
     providerState,
@@ -122,9 +136,12 @@ function useWallet() {
     connectReal,
     connectMock,
     disconnect,
+    openInPay,
     setAddress: persist,
     lang: payLanguage(),
     inPay: inNimiqPay(),
+    network,
+    hasRealAddress: address ? isValidNimiqAddress(address) : false,
   };
 }
 
@@ -266,6 +283,17 @@ function ProfileMenu({ wallet, profile, setRoute, onDisconnect }) {
           <button role="menuitem" onClick={() => go('browse')}>
             Explore
           </button>
+          {!wallet.inPay && (
+            <button
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                wallet.openInPay();
+              }}
+            >
+              Open in Nimiq Pay
+            </button>
+          )}
           <hr />
           <button
             role="menuitem"
@@ -402,6 +430,10 @@ export default function App() {
     if (data.paymentMode === 'prepaid') {
       const treasury = getTreasuryAddress();
       if (wallet.inPay) {
+        if (isDemoAddress(treasury) || !isValidNimiqAddress(treasury)) {
+          setToast('Escrow address is not a real NIM address. Set VITE_TREASURY_ADDRESS.');
+          return;
+        }
         setBusy(`Sending ${base} NIM to escrow…`);
         try {
           fundTx = await sendNim({ recipient: treasury, nim: base, memo: `bounty:create:${id}` });
@@ -451,6 +483,10 @@ export default function App() {
     let txHash = null;
     if (wallet.inPay) {
       const treasury = getTreasuryAddress();
+      if (isDemoAddress(treasury) || !isValidNimiqAddress(treasury)) {
+        setToast('Escrow address is not a real NIM address. Set VITE_TREASURY_ADDRESS.');
+        return;
+      }
       setBusy(`Sending ${amt} NIM top-up…`);
       try {
         txHash = await sendNim({ recipient: treasury, nim: amt, memo: `bounty:topup:${id}` });
@@ -608,17 +644,38 @@ export default function App() {
         return;
       }
 
-      setBusy(`Relayer paying ${pot} NIM…`);
+      setBusy(wallet.inPay ? `Sending ${pot} NIM to hunter…` : `Preview pay ${pot} NIM…`);
       try {
-        relayer = await relayerPayout({
-          to,
-          nim: pot,
-          memo: `bounty:pay:${bountyId}`,
-        });
-        payoutTx = relayer.txHash;
-        setToast(`Relayer paid ${shortAddr(to)} · ${String(payoutTx).slice(0, 14)}…`);
+        if (wallet.inPay) {
+          if (!isValidNimiqAddress(to)) {
+            throw new Error('Hunter payout wallet is not a valid NIM address');
+          }
+          const txHash = await sendNim({
+            recipient: to,
+            nim: pot,
+            memo: `bounty:pay:${bountyId}`,
+          });
+          relayer = {
+            method: 'direct',
+            txHash,
+            to,
+            nim: pot,
+            memo: `bounty:pay:${bountyId}`,
+            at: new Date().toISOString(),
+          };
+          payoutTx = txHash;
+          setToast(`Paid ${shortAddr(to)} · ${String(txHash).slice(0, 14)}…`);
+        } else {
+          relayer = await relayerPayout({
+            to,
+            nim: pot,
+            memo: `bounty:pay:${bountyId}`,
+          });
+          payoutTx = relayer.txHash;
+          setToast(`Preview paid ${shortAddr(to)} · ${String(payoutTx).slice(0, 14)}…`);
+        }
       } catch (err) {
-        setToast(err?.message || 'Relayer payout failed');
+        setToast(err?.message || 'Payout failed');
         setBusy('');
         return;
       }
@@ -660,14 +717,29 @@ export default function App() {
       }
     }
     if (!held.length) return;
+    const useDirect = wallet.inPay && isValidNimiqAddress(walletAddr);
+    if (wallet.inPay && !useDirect) {
+      setToast('Payout wallet is not a valid NIM address');
+      return;
+    }
     for (const item of held) {
       setBusy(`Releasing held payout ${item.pot} NIM…`);
       try {
-        const receipt = await relayerPayout({
-          to: walletAddr,
-          nim: item.pot,
-          memo: `bounty:pay:${item.bountyId}`,
-        });
+        const memo = `bounty:pay:${item.bountyId}`;
+        let receipt;
+        if (useDirect) {
+          const txHash = await sendNim({ recipient: walletAddr, nim: item.pot, memo });
+          receipt = {
+            method: 'direct',
+            txHash,
+            to: walletAddr,
+            nim: item.pot,
+            memo,
+            at: new Date().toISOString(),
+          };
+        } else {
+          receipt = await relayerPayout({ to: walletAddr, nim: item.pot, memo });
+        }
         updateBounty(item.bountyId, (b) => ({
           ...b,
           status: 'paid',
@@ -683,8 +755,10 @@ export default function App() {
               : c,
           ),
         }));
-      } catch {
-        /* leave held */
+      } catch (err) {
+        setToast(err?.message || 'Held payout failed');
+        setBusy('');
+        return;
       }
     }
     setBusy('');
@@ -743,12 +817,10 @@ export default function App() {
             <button
               className="btn"
               onClick={() => {
-                if (!wallet.address) {
-                  try {
-                    wallet.connectReal();
-                  } catch {
-                    wallet.connectMock();
-                  }
+                if (!wallet.address && wallet.inPay) {
+                  wallet.connectReal().catch(() => wallet.connectMock());
+                } else if (!wallet.address) {
+                  wallet.connectMock();
                 }
                 setRoute({ name: 'create' });
               }}
@@ -758,6 +830,11 @@ export default function App() {
             <button className="btn ghost" onClick={() => setRoute({ name: 'docs' })}>
               Docs
             </button>
+            {!wallet.inPay && (
+              <button className="btn ghost" onClick={wallet.openInPay}>
+                Open in Nimiq Pay
+              </button>
+            )}
           </div>
           <div className="stat-strip" aria-label="Bounty stats">
             <div className="stat">
@@ -1004,6 +1081,8 @@ export default function App() {
             me={wallet.address || 'anon'}
             profile={profile}
             earnedNim={earnedNim}
+            wallet={wallet}
+            treasury={getTreasuryAddress()}
             focus={
               route.name === 'my-bounties'
                 ? 'bounties'
@@ -1362,7 +1441,18 @@ function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onCl
   );
 }
 
-function Dashboard({ bounties, me, profile, earnedNim, focus, onSection, onOpen, onProfileSave }) {
+function Dashboard({
+  bounties,
+  me,
+  profile,
+  earnedNim,
+  focus,
+  onSection,
+  onOpen,
+  onProfileSave,
+  wallet,
+  treasury,
+}) {
   const mine = bounties.filter((b) => b.creator === me);
   const myClaims = bounties.flatMap((b) =>
     b.claims
@@ -1541,6 +1631,7 @@ function Dashboard({ bounties, me, profile, earnedNim, focus, onSection, onOpen,
           <div className="panel-box">
             <h4>Settings</h4>
             <GitHubConnect profile={profile} onProfileSave={onProfileSave} />
+
             <div className="field" style={{ marginTop: 14 }}>
               <label htmlFor="d-nim">Payout wallet (NIM)</label>
               <input
@@ -1550,14 +1641,68 @@ function Dashboard({ bounties, me, profile, earnedNim, focus, onSection, onOpen,
                 placeholder="NQ…"
                 disabled={!profile.githubConnected}
               />
+              {payoutWallet.trim() && (
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: isValidNimiqAddress(payoutWallet) ? 'var(--ok, #3d9a6a)' : 'var(--warn, #b7791f)' }}>
+                  {isValidNimiqAddress(payoutWallet)
+                    ? 'Valid NIM address'
+                    : 'Not a valid user-friendly NIM address (36 chars, starts with NQ)'}
+                </p>
+              )}
             </div>
+
+            {wallet?.inPay && wallet.address && (
+              <button
+                type="button"
+                className="btn"
+                style={{ marginTop: 8 }}
+                onClick={() => setPayoutWallet(wallet.address)}
+              >
+                Use connected wallet
+              </button>
+            )}
+
             <button
               className="btn primary"
+              style={{ marginTop: 8 }}
               disabled={!profile.githubConnected || !payoutWallet.trim()}
               onClick={() => onProfileSave({ ...profile, payoutWallet: payoutWallet.trim() })}
             >
               Save
             </button>
+
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--line, #2a2f3a)' }}>
+              <h4>Nimiq Pay</h4>
+              <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--muted)' }}>
+                {wallet?.inPay
+                  ? `Connected · ${wallet.lang}${wallet.network?.blockNumber != null ? ` · block ${wallet.network.blockNumber}` : ''}${wallet.network?.consensus === false ? ' · waiting for consensus' : ''}`
+                  : 'Browser preview — mock wallet only. Open in Nimiq Pay for real NIM.'}
+              </p>
+              {wallet?.address && (
+                <p style={{ margin: '0 0 8px', fontSize: 12, overflowWrap: 'anywhere', color: 'var(--muted)' }}>
+                  Wallet: {wallet.address}
+                  {wallet.hasRealAddress ? '' : ' (preview address)'}
+                </p>
+              )}
+              <p style={{ margin: '0 0 8px', fontSize: 12, overflowWrap: 'anywhere', color: 'var(--muted)' }}>
+                Escrow: {treasury || '—'}
+                {isDemoAddress(treasury) ? ' · set VITE_TREASURY_ADDRESS to a real NQ address' : ''}
+              </p>
+              {!wallet?.inPay && (
+                <button type="button" className="btn" onClick={() => wallet?.openInPay?.()}>
+                  Open in Nimiq Pay
+                </button>
+              )}
+              {wallet?.inPay && !wallet.address && (
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={wallet.connecting}
+                  onClick={() => wallet.connectReal()}
+                >
+                  {wallet.connecting ? 'Connecting…' : 'Connect wallet'}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
