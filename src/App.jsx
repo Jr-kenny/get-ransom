@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LighthouseScene from './components/LighthouseScene.jsx';
 import DocsPage from './Docs.jsx';
-import { loadBounties, saveBounties, bountyTotal, uid, shortAddr } from './store.js';
+import {
+  bountyTotal,
+  uid,
+  shortAddr,
+  loadBountiesCache,
+  fetchBounties,
+  createBountyRemote,
+  pledgeRemote,
+  claimRemote,
+  decideRemote,
+  cacheBounties,
+  patchBounty,
+} from './store.js';
 import {
   connectNimiq,
   payLanguage,
@@ -15,16 +27,16 @@ import {
   importGitHubPull,
   isAssignedTo,
   mockTxHash,
-  loadProfile,
-  saveProfile,
+  loadProfileCache,
+  loadProfileFromServer,
+  persistPayoutWallet,
   relayerPayout,
-  fetchGitHubUser,
   beginGitHubOAuth,
   readGitHubOAuthReturn,
   githubClientId,
-  demoConnectGitHub,
   exchangeGitHubCode,
   signNimiqMessage,
+  disconnectGitHub,
 } from './nimiq.js';
 
 const STATUS_LABEL = {
@@ -396,9 +408,11 @@ function saveRoute(route) {
 }
 
 export default function App() {
-  const [bounties, setBounties] = useState(() => loadBounties());
+  const [bounties, setBounties] = useState(() => loadBountiesCache());
   const [route, setRoute] = useState(() => loadRoute(bounties));
-  const [profile, setProfile] = useState(() => loadProfile());
+  const [profile, setProfile] = useState(() => loadProfileCache());
+  const [apiReady, setApiReady] = useState(false);
+  const [apiError, setApiError] = useState('');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [busy, setBusy] = useState('');
@@ -411,10 +425,47 @@ export default function App() {
     setActionModal({ title, body });
   }
 
-  useEffect(() => saveBounties(bounties), [bounties]);
+  function replaceBounty(next) {
+    setBounties((prev) => {
+      const list = prev.some((b) => b.id === next.id)
+        ? prev.map((b) => (b.id === next.id ? next : b))
+        : [next, ...prev];
+      cacheBounties(list);
+      return list;
+    });
+  }
+
   useEffect(() => saveRoute(route), [route]);
 
-  // GitHub OAuth return — exchange code on the server, bind identity to profile
+  // Boot: session profile + shared bounties from API
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [me, list] = await Promise.all([
+          loadProfileFromServer().catch((e) => {
+            if (e?.status === 401) return loadProfileCache();
+            throw e;
+          }),
+          fetchBounties(),
+        ]);
+        if (cancelled) return;
+        setProfile(me);
+        setBounties(list);
+        setApiReady(true);
+        setApiError('');
+      } catch (err) {
+        if (cancelled) return;
+        setApiReady(false);
+        setApiError(err?.message || 'API unavailable');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // GitHub OAuth return — session cookie set by /api/github/oauth
   useEffect(() => {
     let cancelled = false;
     const ret = readGitHubOAuthReturn();
@@ -422,19 +473,11 @@ export default function App() {
     setBusy('Connecting GitHub…');
     (async () => {
       try {
-        const user = await exchangeGitHubCode(ret.code);
+        await exchangeGitHubCode(ret.code);
+        const me = await loadProfileFromServer();
         if (cancelled) return;
-        setProfile(
-          saveProfile({
-            ...loadProfile(),
-            githubUser: user.login,
-            githubId: user.id,
-            githubAvatar: user.avatar || '',
-            githubConnected: true,
-            githubConnectedAt: new Date().toISOString().slice(0, 10),
-          }),
-        );
-        setToast(`Connected @${user.login}`);
+        setProfile(me);
+        setToast(`Connected @${me.githubUser}`);
       } catch (err) {
         if (!cancelled) setToast(err?.message || 'GitHub connect failed');
       } finally {
@@ -477,94 +520,72 @@ export default function App() {
   }, [bounties, profile.githubUser, wallet.address]);
 
   function updateBounty(id, fn) {
-    setBounties((prev) => prev.map((b) => (b.id === id ? fn(b) : b)));
+    setBounties((prev) => {
+      const list = prev.map((b) => (b.id === id ? fn(b) : b));
+      cacheBounties(list);
+      return list;
+    });
   }
 
   async function createBounty(data, promise) {
-    const base = Math.max(1, Math.round(Number(data.base) || 0));
-    const id = uid('gr');
-    const creator = wallet.address || 'anon';
-    const paymentMode = 'on-solve';
-
-    const assignees = data.issueAssignees || [];
-    const b = {
-      id,
-      kind: 'github',
-      title: data.title.trim(),
-      body: data.body.trim(),
-      repo: data.repo.trim(),
-      issueUrl: data.issueUrl.trim(),
-      issueNumber: data.issueNumber ?? null,
-      issueAssignees: assignees,
-      requireAssignment: assignees.length > 0,
-      tags: data.tags,
-      paymentMode,
-      base,
-      topups: [],
-      promises: [
-        {
-          id: uid('p'),
-          role: 'creator',
-          by: creator,
-          githubUser: profile.githubUser || '',
-          amount: base,
-          signature: promise?.signature || null,
-          publicKey: promise?.publicKey || '',
-          method: promise?.method || 'preview',
-          at: new Date().toISOString().slice(0, 10),
+    if (!profile.githubConnected) {
+      openSettingsGate('Connect GitHub', 'Sign in with GitHub before publishing a bounty.');
+      setBusy('');
+      return;
+    }
+    setBusy('Publishing…');
+    try {
+      const { bounty } = await createBountyRemote({
+        title: data.title,
+        body: data.body,
+        repo: data.repo,
+        issueUrl: data.issueUrl,
+        issueNumber: data.issueNumber,
+        issueAssignees: data.issueAssignees,
+        tags: data.tags,
+        base: data.base,
+        promise: {
+          signature: promise.signature,
+          publicKey: promise.publicKey,
+          method: promise.method,
+          message: promise.message || '',
         },
-      ],
-      fundTx: null,
-      status: 'open',
-      creator,
-      createdAt: new Date().toISOString().slice(0, 10),
-      claims: [],
-    };
-    setBounties((prev) => [b, ...prev]);
-    setBusy('');
-    setToast('Bounty live · signed promise');
-    setRoute({ name: 'detail', id: b.id });
+      });
+      replaceBounty(bounty);
+      setBusy('');
+      setToast('Bounty live · signed promise');
+      setRoute({ name: 'detail', id: bounty.id });
+    } catch (err) {
+      setBusy('');
+      setToast(err?.message || 'Could not publish bounty');
+    }
   }
 
   async function addTopup(id, amount, promise) {
     const amt = Math.round(Number(amount));
     if (!amt || amt < 1) return;
-    const bounty = bounties.find((b) => b.id === id);
-    if (!bounty || bounty.status === 'paid' || bounty.status === 'retracted') return;
-
-    const entry = {
-      id: uid('p'),
-      role: 'pledge',
-      by: wallet.address || 'anon',
-      githubUser: profile.githubUser || '',
-      amount: amt,
-      signature: promise?.signature || null,
-      publicKey: promise?.publicKey || '',
-      method: promise?.method || 'preview',
-      at: new Date().toISOString().slice(0, 10),
-    };
-
-    updateBounty(id, (b) => ({
-      ...b,
-      promises: [...(b.promises || []), entry],
-      topups: [
-        ...b.topups,
-        {
-          by: wallet.address || 'anon',
-          githubUser: profile.githubUser || '',
-          amount: amt,
-          txHash: null,
-          pledged: true,
-          signature: promise?.signature || null,
-          at: entry.at,
+    if (!profile.githubConnected) {
+      openSettingsGate('Connect GitHub', 'Sign in with GitHub to promise NIM.');
+      return;
+    }
+    setBusy('Saving promise…');
+    try {
+      const bounty = await pledgeRemote(id, {
+        amount: amt,
+        promise: {
+          signature: promise.signature,
+          publicKey: promise.publicKey,
+          method: promise.method,
+          message: promise.message || '',
         },
-      ],
-    }));
-    setToast(`Promised +${amt} NIM · pot ${bountyTotal(bounty) + amt} NIM`);
-  }
-
-  function openPromiseFlow(flow) {
-    setPromiseFlow(flow);
+      });
+      replaceBounty(bounty);
+      setBusy('');
+      setToast(`Promised +${amt} NIM · pot ${bountyTotal(bounty)} NIM`);
+    } catch (err) {
+      setBusy('');
+      setToast(err?.message || 'Could not save promise');
+    }
   }
 
   async function confirmPromiseFlow() {
@@ -576,9 +597,9 @@ export default function App() {
       setPromiseFlow(null);
       setBusy('');
       if (action === 'create') {
-        await createBounty(data, signed);
+        await createBounty(data, { ...signed, message });
       } else {
-        await addTopup(bountyId, amount, signed);
+        await addTopup(bountyId, amount, { ...signed, message });
       }
     } catch (err) {
       setBusy('');
@@ -632,7 +653,7 @@ export default function App() {
     if (!profile.payoutWallet) {
       openSettingsGate(
         'Add payout wallet',
-        'Save a NIM payout wallet in Settings so the relayer can pay you.',
+        'Save a NIM payout wallet in Settings so you can be paid on accept.',
       );
       return;
     }
@@ -642,62 +663,41 @@ export default function App() {
     try {
       prMeta = await importGitHubPull(prUrl);
     } catch (err) {
-      if (bounty.kind === 'github') {
-        setToast(err?.message || 'Could not import that PR');
-        setBusy('');
-        return;
-      }
+      setToast(err?.message || 'Could not import that PR');
+      setBusy('');
+      return;
     }
-    setBusy('');
 
     const ghUser = profile.githubUser;
     const prAuthor = (prMeta?.author || '').trim();
     const assigned = bounty.issueAssignees || [];
 
-    if (bounty.kind === 'github' && prAuthor && prAuthor.toLowerCase() !== ghUser.toLowerCase()) {
+    if (prAuthor && prAuthor.toLowerCase() !== ghUser.toLowerCase()) {
       setToast(`PR author @${prAuthor} must match your connected GitHub @${ghUser}.`);
+      setBusy('');
       return;
     }
 
-    if (bounty.kind === 'github' && assigned.length > 0) {
-      if (!isAssignedTo(assigned, ghUser)) {
-        setToast(`Issue is assigned to ${assigned.join(', ')} — only they can claim.`);
-        return;
-      }
+    if (assigned.length > 0 && !isAssignedTo(assigned, ghUser)) {
+      setToast(`Issue is assigned to ${assigned.join(', ')} — only they can claim.`);
+      setBusy('');
+      return;
     }
 
-    const prMerged = !!(prMeta && prMeta.merged);
-
-    updateBounty(id, (b) => {
-      if (b.claims.some((c) => c.ref === prUrl.trim())) {
-        setToast('That PR is already claimed.');
-        return b;
-      }
-      return {
-        ...b,
-        status: b.status === 'open' ? 'review' : b.status,
-        claims: [
-          ...b.claims,
-          {
-            id: uid('c'),
-            by: wallet.address || 'anon',
-            githubUser: ghUser,
-            hunterAddr: wallet.address || '',
-            payoutWallet: profile.payoutWallet || '',
-            ref: prUrl.trim(),
-            note: '',
-            state: prMerged ? 'merged' : 'in-review',
-            prMerged,
-            prState: prMeta?.state || '',
-            at: new Date().toISOString().slice(0, 10),
-            payoutTx: null,
-            payoutHeld: false,
-            relayer: null,
-          },
-        ],
-      };
-    });
-    setToast(prMerged ? 'PR already merged — ready to pay' : 'Claim submitted · pay on merge');
+    setBusy('Saving claim…');
+    try {
+      const next = await claimRemote(id, {
+        prUrl: prUrl.trim(),
+        prMerged: !!(prMeta && prMeta.merged),
+        prState: prMeta?.state || '',
+      });
+      replaceBounty(next);
+      setBusy('');
+      setToast(prMeta?.merged ? 'PR already merged — ready to pay' : 'Claim submitted · pay on merge');
+    } catch (err) {
+      setBusy('');
+      setToast(err?.message || 'Could not save claim');
+    }
   }
 
   async function decideClaim(bountyId, claimId, accept) {
@@ -754,7 +754,7 @@ export default function App() {
         return;
       }
 
-      setBusy(wallet.inPay ? `Sending ${pot} NIM to hunter…` : `Preview pay ${pot} NIM…`);
+      setBusy(wallet.inPay ? `Sending ${pot} NIM to hunter…` : `Recording pay ${pot} NIM…`);
       try {
         if (wallet.inPay) {
           if (!isValidNimiqAddress(to)) {
@@ -776,13 +776,7 @@ export default function App() {
           payoutTx = txHash;
           setToast(`Paid ${shortAddr(to)} · ${String(txHash).slice(0, 14)}…`);
         } else {
-          relayer = await relayerPayout({
-            to,
-            nim: pot,
-            memo: `bounty:pay:${bountyId}`,
-          });
-          payoutTx = relayer.txHash;
-          setToast(`Preview paid ${shortAddr(to)} · ${String(payoutTx).slice(0, 14)}…`);
+          throw new Error('Open Nimiq Pay to send the reward on-chain');
         }
       } catch (err) {
         setToast(err?.message || 'Payout failed');
@@ -791,105 +785,66 @@ export default function App() {
       }
     }
 
-    updateBounty(bountyId, (b) => {
-      const claims = b.claims.map((c) => {
-        if (c.id !== claimId) return accept ? { ...c, state: 'rejected' } : c;
-        return {
-          ...c,
-          state: accept ? 'accepted' : 'rejected',
-          payoutHeld: false,
-          payoutTx: accept ? payoutTx : null,
-          relayer: accept ? relayer : null,
-        };
+    setBusy('Saving…');
+    try {
+      const next = await decideRemote(bountyId, {
+        claimId,
+        accept,
+        payoutTx,
+        relayer,
       });
-      return {
-        ...b,
-        claims,
-        status: accept
-          ? 'paid'
-          : claims.some((c) => c.state === 'in-review' || c.state === 'merged' || c.payoutHeld)
-            ? 'review'
-            : 'open',
-      };
-    });
-    setBusy('');
+      replaceBounty(next);
+      setBusy('');
+    } catch (err) {
+      setBusy('');
+      setToast(err?.message || 'Could not save decision');
+    }
   }
 
-  async function releaseHeldPayouts(nextProfile) {
-    const walletAddr = nextProfile.payoutWallet;
-    if (!walletAddr) return;
-    const held = [];
-    for (const b of bounties) {
-      for (const c of b.claims) {
-        if (c.payoutHeld && c.state === 'accepted') {
-          held.push({ bountyId: b.id, claimId: c.id, pot: bountyTotal(b) });
-        }
-      }
-    }
-    if (!held.length) return;
-    const useDirect = wallet.inPay && isValidNimiqAddress(walletAddr);
-    if (wallet.inPay && !useDirect) {
-      setToast('Payout wallet is not a valid NIM address');
+  async function handleProfileSave(next) {
+    if (!profile.githubConnected) {
+      openSettingsGate('Connect GitHub', 'Sign in with GitHub to save your payout wallet.');
       return;
     }
-    for (const item of held) {
-      setBusy(`Releasing held payout ${item.pot} NIM…`);
-      try {
-        const memo = `bounty:pay:${item.bountyId}`;
-        let receipt;
-        if (useDirect) {
-          const txHash = await sendNim({ recipient: walletAddr, nim: item.pot, memo });
-          receipt = {
-            method: 'direct',
-            txHash,
-            to: walletAddr,
-            nim: item.pot,
-            memo,
-            at: new Date().toISOString(),
-          };
-        } else {
-          receipt = await relayerPayout({ to: walletAddr, nim: item.pot, memo });
-        }
-        updateBounty(item.bountyId, (b) => ({
-          ...b,
-          status: 'paid',
-          claims: b.claims.map((c) =>
-            c.id === item.claimId
-              ? {
-                  ...c,
-                  payoutWallet: walletAddr,
-                  payoutHeld: false,
-                  payoutTx: receipt.txHash,
-                  relayer: receipt,
-                }
-              : c,
-          ),
-        }));
-      } catch (err) {
-        setToast(err?.message || 'Held payout failed');
-        setBusy('');
-        return;
-      }
+    setBusy('Saving wallet…');
+    try {
+      const saved = await persistPayoutWallet(next.payoutWallet || '');
+      setProfile(saved);
+      setBusy('');
+      setToast('Payout wallet saved');
+    } catch (err) {
+      setBusy('');
+      setToast(err?.message || 'Could not save wallet');
     }
-    setBusy('');
-    setToast(`Released ${held.length} held payout${held.length > 1 ? 's' : ''}`);
   }
 
-  function handleProfileSave(next) {
-    const saved = saveProfile(next);
-    setProfile(saved);
-    setToast('Payout settings saved');
-    if (saved.payoutWallet) void releaseHeldPayouts(saved);
+  async function handleDisconnectAll() {
+    wallet.disconnect();
+    try {
+      await disconnectGitHub();
+    } catch {
+      /* ignore */
+    }
+    setProfile(loadProfileCache());
+    setToast('Signed out');
   }
 
   function retractBounty(id) {
-    updateBounty(id, (b) => {
-      if (b.claims.some((c) => c.state === 'in-review')) {
-        setToast('Resolve open claims before retracting');
-        return b;
-      }
-      return { ...b, status: 'retracted' };
-    });
+    setBusy('Retracting…');
+    patchBounty(id, { action: 'retract' })
+      .then(({ bounty }) => {
+        replaceBounty(bounty);
+        setBusy('');
+        if (bounty.status !== 'retracted') {
+          setToast('Resolve open claims before retracting');
+        } else {
+          setToast('Bounty retracted');
+        }
+      })
+      .catch((err) => {
+        setBusy('');
+        setToast(err?.message || 'Could not retract');
+      });
   }
 
   const filtered = bounties.filter((b) => {
@@ -901,10 +856,21 @@ export default function App() {
   });
 
   const active = route.name === 'detail' ? bounties.find((b) => b.id === route.id) : null;
-  const myBounties = bounties.filter((b) => b.creator === wallet.address);
+  const myBounties = bounties.filter(
+    (b) =>
+      (profile.githubUser && b.creatorGithub === profile.githubUser) ||
+      b.creator === wallet.address ||
+      b.creatorGithubId === profile.githubId,
+  );
   const myClaims = bounties.flatMap((b) =>
     b.claims
-      .filter((c) => c.by === wallet.address || c.payoutWallet === profile.payoutWallet)
+      .filter(
+        (c) =>
+          c.by === wallet.address ||
+          (profile.githubUser && c.githubUser === profile.githubUser) ||
+          c.githubId === profile.githubId ||
+          c.payoutWallet === profile.payoutWallet,
+      )
       .map((c) => ({ ...c, bounty: b })),
   );
 
@@ -978,7 +944,7 @@ export default function App() {
               wallet={wallet}
               profile={profile}
               setRoute={setRoute}
-              onDisconnect={wallet.disconnect}
+              onDisconnect={handleDisconnectAll}
             />
           </div>
         </div>
@@ -1017,11 +983,19 @@ export default function App() {
           wallet={wallet}
           profile={profile}
           setRoute={setRoute}
-          onDisconnect={wallet.disconnect}
+          onDisconnect={handleDisconnectAll}
         />
       </header>
 
       <main className="main">
+        {apiError && (
+          <div className="notice" role="status">
+            Backend unavailable — {apiError}. Set UPSTASH_REDIS_REST_URL / TOKEN and SESSION_SECRET on Vercel.
+          </div>
+        )}
+        {!apiReady && !apiError && (
+          <div className="notice busy">Loading shared bounties…</div>
+        )}
         {busy && <div className="notice busy">{busy}</div>}
         {toast && (
           <div className="toast" role="status">
