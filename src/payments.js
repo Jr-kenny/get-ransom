@@ -286,10 +286,11 @@ export function readGitHubOAuthReturn() {
   }
 }
 
-/** Exchange OAuth code via our serverless route; returns { login, id, avatar }. */
+/** Exchange OAuth code via server; sets session cookie; returns public user. */
 export async function exchangeGitHubCode(code) {
   const res = await fetch('/api/github/oauth', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
   });
@@ -297,14 +298,16 @@ export async function exchangeGitHubCode(code) {
   if (!res.ok) {
     throw new Error(body.error || 'GitHub connect failed');
   }
-  if (!body.login) {
+  const user = body.user || body;
+  if (!user.login) {
     throw new Error('GitHub connect returned no user');
   }
   return {
-    login: body.login,
-    id: body.id,
-    avatar: body.avatar || '',
-    name: body.name || '',
+    login: user.login,
+    id: user.githubId ?? user.id,
+    avatar: user.avatar || '',
+    name: user.name || '',
+    payoutWallet: user.payoutWallet || '',
   };
 }
 

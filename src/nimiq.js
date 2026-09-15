@@ -30,4 +30,12 @@ export {
   exchangeGitHubCode,
 } from './payments.js';
 
-export { loadProfile, saveProfile, relayerPayout, disconnectGitHub } from './profile.js';
+export {
+  loadProfileCache,
+  cacheProfile,
+  clearProfileCache,
+  loadProfileFromServer,
+  persistPayoutWallet,
+  disconnectGitHub,
+  relayerPayout,
+} from './profile.js';

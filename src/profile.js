@@ -1,3 +1,10 @@
+/**
+ * Client profile helpers.
+ * Source of truth is the server session + /api/me (GitHub identity, payout wallet).
+ * localStorage is only a non-authoritative cache for paint-before-network.
+ */
+import { fetchMe, savePayoutWallet, logout as apiLogout } from './api.js';
+
 const PROFILE_KEY = 'gr-profile-v1';
 
 const empty = {
@@ -9,7 +16,7 @@ const empty = {
   githubConnectedAt: '',
 };
 
-export function loadProfile() {
+export function loadProfileCache() {
   try {
     const raw = localStorage.getItem(PROFILE_KEY);
     if (!raw) return { ...empty };
@@ -19,29 +26,65 @@ export function loadProfile() {
   }
 }
 
-export function saveProfile(profile) {
+export function cacheProfile(profile) {
   const next = { ...empty, ...profile };
   try {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
-  } catch { /* noop */ }
+  } catch {
+    /* private mode */
+  }
   return next;
 }
 
-export function disconnectGitHub(profile) {
-  return saveProfile({
-    ...profile,
-    githubUser: '',
-    githubId: null,
-    githubAvatar: '',
-    githubConnected: false,
-    githubConnectedAt: '',
-  });
+export function clearProfileCache() {
+  try {
+    localStorage.removeItem(PROFILE_KEY);
+  } catch {
+    /* noop */
+  }
+  return { ...empty };
 }
 
-/**
- * Browser-preview payout stub. Real payouts use sendNim() inside Nimiq Pay
- * (see App decideClaim / releaseHeldPayouts).
- */
+function fromServerUser(user) {
+  if (!user) return { ...empty };
+  return {
+    payoutWallet: user.payoutWallet || '',
+    githubUser: user.login || '',
+    githubId: user.githubId ?? null,
+    githubAvatar: user.avatar || '',
+    githubConnected: true,
+    githubConnectedAt: (user.githubConnectedAt || '').slice(0, 10),
+  };
+}
+
+export async function loadProfileFromServer() {
+  try {
+    const { user } = await fetchMe();
+    const profile = fromServerUser(user);
+    cacheProfile(profile);
+    return profile;
+  } catch (err) {
+    if (err?.status === 401) {
+      clearProfileCache();
+      return { ...empty };
+    }
+    throw err;
+  }
+}
+
+export async function persistPayoutWallet(payoutWallet) {
+  const { user } = await savePayoutWallet(payoutWallet);
+  const profile = fromServerUser(user);
+  cacheProfile(profile);
+  return profile;
+}
+
+export async function disconnectGitHub() {
+  await apiLogout();
+  return clearProfileCache();
+}
+
+/** Browser-only payout stub when not inside Nimiq Pay. */
 export async function relayerPayout({ to, nim, memo }) {
   if (!to || !String(to).trim()) {
     throw new Error('Hunter has no payout wallet saved');
@@ -50,12 +93,10 @@ export async function relayerPayout({ to, nim, memo }) {
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error('Invalid payout amount');
   }
-
-  await new Promise((r) => setTimeout(r, 450));
-  const receipt = `preview-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+  await new Promise((r) => setTimeout(r, 200));
   return {
-    method: 'preview',
-    txHash: receipt,
+    method: 'browser',
+    txHash: `browser-${Date.now().toString(36)}`,
     to: String(to).trim(),
     nim: amount,
     memo: memo || '',
