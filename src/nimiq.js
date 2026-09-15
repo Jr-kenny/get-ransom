@@ -4,6 +4,7 @@ export {
   inNimiqPay,
   sendNim,
   listNimiqAccounts,
+  signNimiqMessage,
   getNimiqNetworkStatus,
   isValidNimiqAddress,
   isDemoAddress,

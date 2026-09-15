@@ -184,6 +184,32 @@ export async function listNimiqAccounts() {
   return accounts.map((a) => String(a));
 }
 
+/**
+ * Sign a bounty promise with the Nimiq wallet (native confirm in Pay).
+ * Browser preview returns a mock signature so UI can flow without a chain.
+ */
+export async function signNimiqMessage(message) {
+  const text = String(message || '');
+  if (!text.trim()) throw new Error('Nothing to sign');
+  if (!inNimiqPay()) {
+    return {
+      method: 'preview',
+      publicKey: '',
+      signature: `preview-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
+    };
+  }
+  const nimiq = await connectNimiq(10_000);
+  const result = unwrap(await nimiq.sign(text), 'Sign');
+  if (!result || typeof result !== 'object' || !result.signature) {
+    throw new Error('Wallet returned no signature');
+  }
+  return {
+    method: 'pay',
+    publicKey: String(result.publicKey || ''),
+    signature: String(result.signature),
+  };
+}
+
 const ISSUE_RE = /github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/i;
 const PR_RE = /github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/i;
 
