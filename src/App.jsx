@@ -887,7 +887,8 @@ export default function App() {
             Keep the <em>light</em> on for open work
           </h1>
           <p className="lede">
-            Import a GitHub issue, set the NIM pot, ship a PR. Complete → relayer pays.
+            Put a NIM pot on a GitHub issue. Sign a promise. Hunters claim with a PR. On merge, you
+            pay from Nimiq Pay — no platform escrow.
           </p>
           <div className="cta-row">
             <button className="btn primary" onClick={() => setRoute({ name: 'browse' })}>
@@ -934,12 +935,12 @@ export default function App() {
               Paste a GitHub issue URL.
             </div>
             <div>
-              <b>02 · Crowdfund</b>
-              Top up the pot in NIM.
+              <b>02 · Promise</b>
+              Sign the pot. Others can add.
             </div>
             <div>
-              <b>03 · Relayer</b>
-              Complete → pays saved wallet.
+              <b>03 · Pay on merge</b>
+              Creator sends NIM from Pay.
             </div>
           </div>
           <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 4 }}>

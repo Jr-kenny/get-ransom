@@ -2,13 +2,13 @@
 
 **Keep the light on for open work.**
 
-Get Ransom is a Nimiq Pay mini-app bounty hub. Paste a public GitHub issue, fund a NIM pot, let the crowd top it up, and pay hunters when their pull request merges. Identity is a connected GitHub login. Payouts go through a relayer to a saved NIM wallet — not a pasted handle.
+Get Ransom is a Nimiq Pay mini-app bounty hub. Paste a public GitHub issue, sign a NIM promise for the pot, let others pledge, and pay hunters when their PR merges. Identity is a connected GitHub login (shared across devices). Payouts go from the creator's Nimiq Pay wallet to the hunter's saved NQ address. No platform escrow.
 
 **Live:** [get-ransom.vercel.app](https://get-ransom.vercel.app)
 
 ## Short description
 
-> Post NIM bounties on GitHub issues, crowdfund the pot, claim with a PR. Paid on merge via relayer. A Nimiq Pay mini-app.
+> Post NIM bounties on GitHub issues, grow the pot with signed promises, claim with a PR. Paid on merge from the creator's Nimiq Pay wallet.
 
 ## What it does
 

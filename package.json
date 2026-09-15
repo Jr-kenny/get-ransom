@@ -2,7 +2,7 @@
   "name": "get-ransom",
   "private": true,
   "version": "0.1.0",
-  "description": "Nimiq Pay bounty hub — fund GitHub issues with NIM, claim with a PR, relayer pays on merge.",
+  "description": "Nimiq Pay bounty hub — GitHub issues, signed NIM promises, pay on merge from the creator wallet.",
   "type": "module",
   "scripts": {
     "dev": "vite",

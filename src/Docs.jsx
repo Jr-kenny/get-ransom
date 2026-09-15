@@ -3,9 +3,9 @@ import { useEffect, useState } from 'react';
 const SECTIONS = [
   { id: 'hunter', label: 'Bounty hunters' },
   { id: 'creator', label: 'Bounty creators' },
-  { id: 'owner', label: 'Repository owners' },
-  { id: 'github-app', label: 'GitHub App' },
-  { id: 'nimiq', label: 'Nimiq & payouts' },
+  { id: 'promises', label: 'Promises & pay' },
+  { id: 'accounts', label: 'Accounts' },
+  { id: 'nimiq', label: 'Nimiq Pay' },
   { id: 'faq', label: 'FAQs' },
 ];
 
@@ -101,8 +101,9 @@ export default function DocsPage({ onNavigate }) {
           <p className="kicker">Get Ransom · field manual</p>
           <h1>Keep the light on for open work</h1>
           <p className="lede">
-            Place a NIM bounty on any GitHub issue. Hunters ship a PR. The keeper marks it
-            complete — the relayer pays the saved wallet. No Stripe. No paste-and-pray identity.
+            Put a NIM pot on a GitHub issue. Anyone can promise more. Hunters ship PRs. When the
+            keeper accepts a merged PR, they pay from their own Nimiq Pay wallet. No platform
+            custody.
           </p>
           <div className="cta-row">
             <button className="btn primary" onClick={() => onNavigate('browse')}>
@@ -118,94 +119,68 @@ export default function DocsPage({ onNavigate }) {
           Bounty hunter guide
         </H>
         <P>
-          You sail out with a PR and come back with NIM. Identity is your connected GitHub
-          account — the same login that authors the pull request. Wallet is a NIM address the
-          relayer pays into. Nothing else gets you paid.
+          You are paid in NIM for a merged pull request. Your identity is the GitHub account you
+          connect (it must match the PR author). Your payout wallet is a NIM address saved on your
+          account — it follows you on every device.
         </P>
 
-        <H level={3}>1 · Getting started</H>
+        <H level={3}>1 · Get set</H>
         <Ol>
           <li>
-            Connect the Nimiq wallet (Nimiq Pay on mobile, or demo connect in a desktop browser
-            preview).
+            Open the app in <b>Nimiq Pay</b> (or a desktop browser for browsing only).
           </li>
           <li>
-            Open <b>Profile → Settings</b> and <b>Connect GitHub</b>. That handle is your username
-            everywhere in the app. It stays bound to this wallet login.
+            <b>Connect GitHub</b> in Settings. That login is you everywhere. Sign in again on
+            another phone and the same account comes back.
           </li>
           <li>
-            Save a <b>payout wallet</b> (NIM address). Claims without one are held until you add
-            it.
+            Save a <b>payout wallet</b> (NQ…). Claims without one are blocked until you add it.
           </li>
         </Ol>
 
         <H level={3}>2 · Find work</H>
         <Ol>
-          <li>Open Explore. Search by title, repo, or tags.</li>
-          <li>Filter by GitHub vs open task, or open / in review / paid.</li>
+          <li>Explore → search title, repo, or tags.</li>
+          <li>Open a bounty. Read the reward total and who has promised.</li>
           <li>
-            Open a bounty. Read the accept line. If the issue is assigned, only assignees can
-            claim.
+            If <b>assignee only</b> is on, only those GitHub logins can claim. Otherwise anyone
+            connected can.
           </li>
         </Ol>
 
-        <H level={3}>3 · Ship the PR</H>
+        <H level={3}>3 · Ship and claim</H>
         <Ol>
-          <li>Fork the repository linked on the bounty.</li>
-          <li>Solve the issue as described. Match the project&apos;s standards.</li>
-          <li>Open a pull request from your fork into the original repo.</li>
+          <li>Fork the repo, fix the issue, open a PR from your GitHub account.</li>
           <li>
-            The GitHub account on the PR <b>must</b> match the account you connected in Settings.
+            <b>Claim bounty</b> → paste the PR URL in the modal. Other submitted PRs are listed
+            under the form.
           </li>
-        </Ol>
-
-        <H level={3}>4 · Claim</H>
-        <Ol>
-          <li>On the bounty page, paste the pull request URL and hit Claim.</li>
-          <li>We import the PR from GitHub — author, state, merge status.</li>
-          <li>Pay-on-merge: if several hunters claim, the first merged PR wins the pot.</li>
+          <li>
+            Several hunters can claim. The keeper merges one PR and pays that claim. The rest stay
+            unpaid.
+          </li>
         </Ol>
         <Callout>
-          Assignment lock: when the issue already has assignees on GitHub, only those logins can
-          claim. Unassigned issues stay open to any connected hunter.
+          The PR author must match your connected GitHub. A pasted handle that is not yours will
+          not pay out.
         </Callout>
 
-        <H level={3}>5 · Get paid</H>
+        <H level={3}>4 · Get paid</H>
         <P>
-          The keeper reviews and, when the PR is merged (or they accept your fork), marks complete.
-          The <b>relayer</b> sends NIM to your saved payout wallet. If you had not saved a wallet
-          yet, the payout sits <b>held</b> until Settings is filled in — then it releases
-          automatically.
+          After merge, the keeper opens the claim and taps pay inside Nimiq Pay. NIM moves from
+          their wallet to your saved payout address on-chain. Get Ransom never holds the pot.
         </P>
 
         <H level={3}>Hunter workflow</H>
         <Flow
           steps={[
-            { title: 'Connect', body: 'wallet + GitHub + payout address in Settings' },
-            { title: 'Pick a bounty', body: 'Explore → open the issue' },
-            { title: 'PR on GitHub', body: 'fork, fix, open pull request' },
-            { title: 'Claim', body: 'paste the PR URL in Get Ransom' },
-            { title: 'Wait for merge', body: 'pay-on-merge picks the winner' },
-            { title: 'Keeper decides', body: 'accept or reject' },
-            { title: 'Relayer pays', body: 'NIM lands in your saved wallet' },
+            { title: 'Connect GitHub + payout wallet', body: 'Settings, any device' },
+            { title: 'Open a bounty', body: 'Explore' },
+            { title: 'PR on GitHub', body: 'author = connected login' },
+            { title: 'Claim', body: 'modal → paste PR URL' },
+            { title: 'Keeper merges & pays', body: 'real NIM send from their wallet' },
           ]}
         />
-
-        <H level={3}>Disputes</H>
-        <Ol>
-          <li>
-            If your claim is rejected but the PR is merged and clearly solves the issue, open a
-            dispute from My Claims with a short rationale and links.
-          </li>
-          <li>
-            Keepers can still use your fork even when the upstream merge is delayed — that is a
-            valid accept path.
-          </li>
-          <li>
-            Unresolved disputes go to human review. You get the outcome in-app (email ships with
-            the hosted backend).
-          </li>
-        </Ol>
 
         <hr className="doc-rule" />
 
@@ -213,214 +188,128 @@ export default function DocsPage({ onNavigate }) {
           Bounty creator guide
         </H>
         <P>
-          You are the keeper. You import a real GitHub issue, set the NIM pot, and decide when a
-          claim is good enough to light the lamp and pay out.
+          You post a pot on a public GitHub issue and sign a promise for that amount. When a PR is
+          merged and you accept it, you send the full reward from Nimiq Pay.
         </P>
 
-        <H level={3}>1 · Getting started</H>
+        <H level={3}>1 · Create</H>
         <Ol>
-          <li>Connect your Nimiq wallet.</li>
+          <li>Connect GitHub. Connect your Nimiq wallet (for signing and paying).</li>
           <li>
-            Settings → Connect GitHub + payout wallet (you may earn on other bounties too).
-          </li>
-        </Ol>
-
-        <H level={3}>2 · Create a bounty</H>
-        <Ol>
-          <li>
-            Profile → <b>Create new bounty</b> (not on Explore — create has its own door).
+            <b>Create a bounty</b> → paste a public issue URL → <b>Import</b>.
           </li>
           <li>
-            Paste a public GitHub issue URL and <b>Import</b>. Title, body, repo, labels, and
-            assignees come from GitHub. No free-typed “issue” for GitHub bounties.
+            Optional: <b>Only GitHub assignees can claim</b> if the issue is already assigned.
           </li>
-          <li>Choose payment mode:</li>
-        </Ol>
-        <Ul>
-          <li>
-            <b>Pay on solve</b> — nothing moves now. Relayer pays on accept.
-          </li>
-          <li>
-            <b>Prepaid</b> — funds move to the platform escrow when you publish. Completing still
-            routes through the relayer to the hunter&apos;s wallet.
-          </li>
-        </Ul>
-        <Ol start={4}>
-          <li>Set the amount in NIM and publish.</li>
-          <li>
-            After publish, <b>we</b> comment on the issue as the app. You do not need to tag us.
-          </li>
+          <li>Set the NIM amount → <b>Sign promise &amp; publish</b> (modal + wallet sign).</li>
         </Ol>
         <Callout>
-          Escrow is platform-maintained. You never paste a treasury address. Crowdfund top-ups go
-          to the same escrow; every pledge is logged on the bounty.
+          Pay on solve only. There is no prepaid escrow. Nimiq has no merge-conditioned contract
+          that would let a platform hold funds without custody risk.
         </Callout>
 
-        <H level={3}>3 · Crowdfund</H>
+        <H level={3}>2 · Grow the pot</H>
         <P>
-          Anyone (including you) can top up an open bounty. Contributors add NIM to the same pot.
-          When the claim is paid, the full pot goes to the accepted hunter.
+          Anyone can <b>Promise +N</b>. The total reward updates and their name joins
+          Contributions under yours. Promises are signed statements, not locked coins.
         </P>
 
-        <H level={3}>4 · Review claims</H>
+        <H level={3}>3 · Review claims</H>
         <Ol>
-          <li>Hunters submit a PR URL. We show author, merge state, and notes.</li>
+          <li>Claims list every PR submitted. Open the link on GitHub.</li>
           <li>
-            <b>Wait for merge</b> if multiple PRs are in flight — merge decides who can be paid.
+            Merge the PR you want. Unmerged claims show <b>Wait for merge</b>.
           </li>
           <li>
-            Accept → relayer pays the hunter&apos;s saved wallet. Reject → open the bounty again
-            (or keep waiting on other claims).
+            <b>Pay</b> → confirm the NIM send in Nimiq Pay to the hunter&apos;s payout wallet.
           </li>
+          <li>Reject the rest if you want a clean board.</li>
         </Ol>
 
-        <H level={3}>5 · Retract</H>
-        <P>
-          You can retract a bounty with no open claims. Refunds follow the prepaid/escrow rules
-          for that pot (platform fee may apply on the hosted product).
-        </P>
+        <H level={3}>4 · Retract</H>
+        <P>You can retract a bounty with no open in-review claims.</P>
 
         <H level={3}>Creator workflow</H>
         <Flow
           steps={[
-            { title: 'Import issue', body: 'paste GitHub URL, load metadata' },
-            { title: 'Set pot & mode', body: 'on-solve or prepaid' },
-            { title: 'Publish', body: 'we comment on the issue' },
-            { title: 'Crowdfund (optional)', body: 'others top up the pot' },
-            { title: 'Claims arrive', body: 'PR URLs imported from GitHub' },
-            { title: 'Pay on merge', body: 'accept merged winner' },
-            { title: 'Relayer', body: 'NIM to hunter wallet' },
+            { title: 'Import issue', body: 'public GitHub URL' },
+            { title: 'Sign promise', body: 'modal + Nimiq Pay sign' },
+            { title: 'Optional pledges', body: 'others add to the pot' },
+            { title: 'Claims arrive', body: 'PR URLs' },
+            { title: 'Merge one PR', body: 'on GitHub' },
+            { title: 'Pay from your wallet', body: 'on-chain NIM to hunter' },
           ]}
         />
 
         <hr className="doc-rule" />
 
-        <H id="owner" level={2}>
-          Repository owners
+        <H id="promises" level={2}>
+          Promises and how money moves
         </H>
         <P>
-          Get Ransom is built for open source. You do not need to own a repo for someone to
-          bounty an issue on it — but as a maintainer you can steer the traffic.
+          A <b>promise</b> is a signed message: who, which issue, how much NIM, pay-on-solve. It
+          shows on the bounty under Contributions. It is not escrow.
         </P>
         <Ul>
           <li>
-            <b>Earn on your own repo</b> — community bounties land on your issues; you (or your
-            contributors) can solve and claim.
+            <b>Create</b> — creator signs the base pot.
           </li>
           <li>
-            <b>Attract PRs</b> — a visible NIM pot on a hard bug is a better recruiting signal
-            than another “good first issue” label.
+            <b>Pledge</b> — anyone signs an add-on. Reward total = sum of promises.
           </li>
           <li>
-            <b>Assignee lock</b> — assign the issue on GitHub and only that hunter can claim.
-            Use it when you already have a trusted solver.
-          </li>
-          <li>
-            <b>Install the GitHub App</b> — optional. Lets the bot post a single bounty comment
-            and keeps tracking in the issue thread without spam.
+            <b>Pay</b> — only the creator&apos;s wallet sends NIM, when they accept a merged claim.
           </li>
         </Ul>
         <Callout>
-          Prefer PRs from forks over drive-by commits. If upstream merge is blocked, you can still
-          accept a claim that uses the hunter&apos;s fork — same payout path.
+          Default risk is real: a creator can delay or refuse pay after merge. Mitigations are the
+          public promise, the PR trail, and reputation — not a locked contract.
         </Callout>
 
         <hr className="doc-rule" />
 
-        <H id="github-app" level={2}>
-          GitHub App
+        <H id="accounts" level={2}>
+          Accounts across devices
         </H>
-        <P>
-          The Get Ransom GitHub App is the quiet layer between issues and the lamp. Install it on
-          orgs or specific repos so bounties can announce themselves without you babysitting
-          comments.
-        </P>
-
-        <H level={3}>What you can do with the App</H>
         <Ul>
           <li>
-            <b>Create bounties on public repos</b> — import any public issue into Get Ransom.
+            <b>GitHub session</b> — Connect GitHub sets a cookie on that browser. Another device
+            needs Connect GitHub once; your payout wallet and history load from the server.
           </li>
           <li>
-            <b>Announce once</b> — the app comments when a bounty is funded and when it is paid.
-            No drive-by spam.
+            <b>Payout wallet</b> — stored on your account, not only on the phone.
           </li>
           <li>
-            <b>Track in-thread</b> — keepers and hunters keep context on GitHub while settlement
-            happens in the mini-app.
+            <b>Nimiq wallet</b> — keys stay in Nimiq Pay. Connect wallet is per device; that is
+            intentional.
           </li>
           <li>
-            <b>Assignee awareness</b> — we read assignees so claim rules stay honest.
+            <b>Bounties &amp; claims</b> — shared. Everyone sees the same pots.
           </li>
         </Ul>
-
-        <H level={3}>Install</H>
-        <Ol>
-          <li>Open the Get Ransom App on GitHub Marketplace (or your org&apos;s app settings).</li>
-          <li>
-            <b>Install</b> → choose the account/org → pick <b>All repositories</b> or a selected
-            list.
-          </li>
-          <li>
-            Grant issue read/write (comments) and pull-request read. We never push code.
-          </li>
-          <li>
-            Back in the mini-app, import an issue on an installed repo and publish. The bot handles
-            the rest.
-          </li>
-        </Ol>
-        <Callout>
-          You can still place bounties on public repos without installing the App. Install when you
-          want the bot comment and cleaner tracking.
-        </Callout>
-
-        <H level={3}>How it works</H>
-        <Flow
-          steps={[
-            { title: 'Install App', body: 'connect GitHub, pick repos' },
-            { title: 'Import issue', body: 'paste URL in Create' },
-            { title: 'Fund the pot', body: 'on-solve or prepaid NIM' },
-            { title: 'Bot comments', body: 'bounty live on the issue' },
-            { title: 'Hunter PR + claim', body: 'imported from GitHub' },
-            { title: 'Merge & accept', body: 'keeper lights the lamp' },
-            { title: 'Relayer payout', body: 'bot notes paid on the issue' },
-          ]}
-        />
 
         <hr className="doc-rule" />
 
         <H id="nimiq" level={2}>
-          Nimiq, escrow & the relayer
+          Nimiq Pay
         </H>
         <P>
-          Get Ransom is a <b>Nimiq Pay mini-app</b>. Wallet actions run through the Mini App SDK
-          inside Pay (native confirmation dialogs). Desktop browser is a preview with mock chain
-          receipts so you can walk the full UI.
+          Get Ransom is a Nimiq Pay mini-app. Sign and send go through native wallet dialogs. A
+          desktop browser can browse and connect GitHub; real NIM needs Pay.
         </P>
         <Ul>
           <li>
-            <b>Identity</b> — GitHub OAuth (or PR-author verification). Bound to the wallet login.
+            <b>Units</b> — 1 NIM = 100,000 Luna. UI shows NIM.
           </li>
           <li>
-            <b>Escrow</b> — platform treasury for prepaid pots and crowdfunds. Not a paste-in
-            address.
+            <b>Open in Pay</b> —{' '}
+            <code>https://nimpay.app/miniapps/open/get-ransom.vercel.app</code>
           </li>
           <li>
-            <b>Relayer</b> — on accept, sends NIM to the hunter&apos;s stored payout wallet.
-            Hold-release if that wallet was missing at accept time.
-          </li>
-          <li>
-            <b>Units</b> — 1 NIM = 100,000 Luna on chain. UI shows NIM.
-          </li>
-          <li>
-            <b>Testnet</b> — in Nimiq Pay, long-press settings for the dev menu, switch to
-            testnet, claim free NIM, exercise real sends.
+            <b>Testnet</b> — in Pay, long-press settings for the dev menu, switch to testnet, claim
+            free NIM, exercise sends.
           </li>
         </Ul>
-        <P>
-          Share the mini-app with <code>nimiqpay://miniapp?url=…</code> or{' '}
-          <code>https://nimpay.app/miniapps/open/…</code> once you have an HTTPS host.
-        </P>
 
         <hr className="doc-rule" />
 
@@ -430,46 +319,32 @@ export default function DocsPage({ onNavigate }) {
 
         <H level={3}>When is a bounty paid?</H>
         <P>
-          When the keeper accepts a claim whose PR is merged (or whose fork they choose to use).
-          Merge alone does not pay; accept + relayer does.
+          When the keeper accepts a claim whose PR is merged and confirms the NIM send in Nimiq
+          Pay. Merge alone does not pay.
         </P>
 
-        <H level={3}>What if my PR is not merged?</H>
+        <H level={3}>Can many people claim?</H>
         <P>
-          Talk on the issue. The keeper can still accept if they take your fork. Pay-on-merge
-          means unmerged PRs wait — that is intentional when several hunters compete.
+          Yes, unless assignee lock is on. One merged PR is paid. You can reject the others.
         </P>
 
-        <H level={3}>Can I claim several bounties at once?</H>
-        <P>Yes. Each claim is a separate PR and a separate pot.</P>
-
-        <H level={3}>Do I need to own the repository?</H>
+        <H level={3}>Is the pot locked?</H>
         <P>
-          No. Anyone can fund a bounty on a public issue. Maintainers can install the App for bot
-          comments and assignee locks.
+          No. Promises are signed commitments. Coins move only when the creator pays on accept.
         </P>
 
-        <H level={3}>Why do I need GitHub connect?</H>
+        <H level={3}>Why connect GitHub?</H>
         <P>
-          Payouts and claims are tied to a real GitHub login so pasted handles cannot be spoofed.
-          The PR author must match your connected account.
+          So claims and payouts bind to a real login. PR author must match the connected account.
         </P>
 
         <H level={3}>Can I change my payout wallet?</H>
         <P>
-          Yes — Settings. GitHub stays bound to the wallet login; the NIM payout address is
-          editable.
+          Yes. Settings → payout wallet. It saves to your account and works on every device after
+          you Connect GitHub.
         </P>
 
-        <H level={3}>Support</H>
-        <P>
-          In-app toasts and claim states first. For production, wire support@yourdomain and the
-          dispute queue to the same moderation desk you run for the App.
-        </P>
-
-        <p className="doc-foot">
-          Lamp true. Pots honest. Happy shipping.
-        </p>
+        <p className="doc-foot">Lamp true. Pots honest. Happy shipping.</p>
       </article>
     </div>
   );
