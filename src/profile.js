@@ -38,7 +38,10 @@ export function disconnectGitHub(profile) {
   });
 }
 
-/** Relayer: auto-pay hunter's stored wallet when keeper marks complete. */
+/**
+ * Browser-preview payout stub. Real payouts use sendNim() inside Nimiq Pay
+ * (see App decideClaim / releaseHeldPayouts).
+ */
 export async function relayerPayout({ to, nim, memo }) {
   if (!to || !String(to).trim()) {
     throw new Error('Hunter has no payout wallet saved');
@@ -49,8 +52,9 @@ export async function relayerPayout({ to, nim, memo }) {
   }
 
   await new Promise((r) => setTimeout(r, 450));
-  const receipt = `relayer-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+  const receipt = `preview-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
   return {
+    method: 'preview',
     txHash: receipt,
     to: String(to).trim(),
     nim: amount,
