@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LighthouseScene from './components/LighthouseScene.jsx';
 import DocsPage from './Docs.jsx';
+import MarkdownBody from './components/MarkdownBody.jsx';
 import {
   bountyTotal,
   uid,
@@ -1344,7 +1345,7 @@ function DetailView({ bounty: b, me, profile, inPay, busy, onBack, onTopup, onCl
           {b.issueAssignees?.length > 0 && <span className="badge review">assignee only</span>}
         </div>
         <h2>{b.title}</h2>
-        <p>{b.body}</p>
+        <MarkdownBody source={b.body} />
         <div className="row" style={{ marginTop: 12 }}>
           {b.issueUrl && (
             <a className="btn small primary" href={b.issueUrl} target="_blank" rel="noreferrer">
