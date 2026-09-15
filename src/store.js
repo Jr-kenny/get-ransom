@@ -10,7 +10,7 @@ const seed = [
     repo: 'nimiq/pay-core',
     issueUrl: 'https://github.com/nimiq/pay-core/issues/412',
     tags: ['typescript', 'deeplink', 'ios'],
-    paymentMode: 'prepaid',
+    paymentMode: 'on-solve',
     base: 850,
     topups: [{ by: 'NQ32…7K9D', amount: 150, txHash: null }],
     fundTx: null,
@@ -75,7 +75,7 @@ const seed = [
     repo: '',
     issueUrl: '',
     tags: ['video', 'qa'],
-    paymentMode: 'prepaid',
+    paymentMode: 'on-solve',
     base: 220,
     topups: [],
     fundTx: null,
@@ -98,12 +98,16 @@ const seed = [
 ];
 
 function total(b) {
+  if (Array.isArray(b.promises) && b.promises.length) {
+    return b.promises.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  }
   return b.base + b.topups.reduce((s, t) => s + t.amount, 0);
 }
 
 function normalize(b) {
   const merged = {
     paymentMode: 'on-solve',
+    kind: 'github',
     fundTx: null,
     topups: [],
     claims: [],
@@ -111,11 +115,43 @@ function normalize(b) {
     requireAssignment: false,
     issueAssignees: [],
     issueNumber: null,
+    promises: null,
     ...b,
   };
+  let promises = Array.isArray(merged.promises) ? merged.promises : null;
+  if (!promises) {
+    promises = [];
+    if (Number(merged.base) > 0) {
+      promises.push({
+        id: 'p-base',
+        role: 'creator',
+        by: merged.creator || 'anon',
+        githubUser: merged.creatorGithub || '',
+        amount: Number(merged.base) || 0,
+        signature: merged.creatorSignature || null,
+        publicKey: '',
+        at: merged.createdAt || '',
+      });
+    }
+    (merged.topups || []).forEach((t, i) => {
+      promises.push({
+        id: `p-up-${i}`,
+        role: 'pledge',
+        by: t.by || 'anon',
+        githubUser: t.githubUser || '',
+        amount: Number(t.amount) || 0,
+        signature: t.signature || null,
+        publicKey: '',
+        at: t.at || '',
+      });
+    });
+  }
   return {
     ...merged,
-    topups: (merged.topups || []).map((t) => ({ txHash: null, ...t })),
+    kind: 'github',
+    paymentMode: 'on-solve',
+    promises,
+    topups: (merged.topups || []).map((t) => ({ txHash: null, pledged: true, ...t })),
     claims: (merged.claims || []).map((c) => ({
       hunterAddr: '',
       githubUser: '',
