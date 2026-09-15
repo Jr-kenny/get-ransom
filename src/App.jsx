@@ -993,7 +993,7 @@ export default function App() {
       <main className="main">
         {apiError && (
           <div className="notice" role="status">
-            Backend unavailable — {apiError}. Set UPSTASH_REDIS_REST_URL / TOKEN and SESSION_SECRET on Vercel.
+            Could not load shared data. Pull to refresh or try again in a moment.
           </div>
         )}
         {!apiReady && !apiError && (

@@ -13,8 +13,9 @@ function uid(prefix) {
 
 export default async function handler(req, res) {
   noStore(res);
+  try {
   if (!redisConfigured()) {
-    return res.status(500).json({ error: 'Database is not configured' });
+    return res.status(500).json({ error: 'Service temporarily unavailable' });
   }
 
   const id = String(req.query.id || '');
@@ -164,4 +165,8 @@ export default async function handler(req, res) {
   }
 
   return res.status(400).json({ error: 'Unknown action' });
+  } catch (err) {
+    console.error('bounty id handler', err);
+    return res.status(500).json({ error: 'Service temporarily unavailable' });
+  }
 }
